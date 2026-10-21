@@ -190,6 +190,56 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--accent-primary": "#38BDF8",
         },
     },
+    "toss-clarity": {
+        "name": "Toss / Karrot High-Contrast Clarity",
+        "benchmarks": [
+            {
+                "product": "Toss App & Design System (TDS)",
+                "whyItWorks": "1 sentence 1 judgment copy hierarchy, bold numeric contrast, and clean squircle cards without nested borders.",
+                "keyBorrowing": "Use `#F2F4F6` cool gray canvas with pure `#FFFFFF` surface cards and `#3182F6` high-trust action accent.",
+            },
+            {
+                "product": "Karrot (당근) & KakaoBank",
+                "whyItWorks": "Generous touch targets, zero decorative gradient blobs, and immediate status readability.",
+                "keyBorrowing": "Enforce 4-step integer typography scale and `.status-dot-sm` semantic indicators.",
+            },
+            {
+                "product": "Korean ASD-STE100 + Toss Writing",
+                "whyItWorks": "Explains mechanism before conclusion using active Korean verbs (`해요체`) and zero AI translation-ese.",
+                "keyBorrowing": "Eliminate `~에 있어서`, `극대화합니다`, and `혁신적인 솔루션` across all UI copy.",
+            },
+        ],
+        "antiReferences": [
+            "Purple/indigo radial-gradient background blobs",
+            "Fractional pixel font sizes (`10.5px`, `11.5px`, `12.5px`)",
+            "Blocked mobile viewport pinch-to-zoom (`user-scalable=no`)",
+            "Robotic Korean AI translation-ese copy",
+        ],
+        "light": {
+            "--surface-canvas": "#F2F4F6",
+            "--surface-card": "#FFFFFF",
+            "--surface-subtle": "#E5E8EB",
+            "--surface-sheet": "rgba(255, 255, 255, 0.94)",
+            "--token-border-subtle": "#E5E8EB",
+            "--token-border-strong": "#D1D6DB",
+            "--text-primary": "#191F28",
+            "--text-secondary": "#4E5968",
+            "--text-muted": "#8B95A1",
+            "--accent-primary": "#3182F6",
+        },
+        "dark": {
+            "--surface-canvas": "#101214",
+            "--surface-card": "#171A1E",
+            "--surface-subtle": "#20242A",
+            "--surface-sheet": "rgba(23, 26, 30, 0.92)",
+            "--token-border-subtle": "#262B33",
+            "--token-border-strong": "#333A44",
+            "--text-primary": "#F9FAFB",
+            "--text-secondary": "#B0B8C1",
+            "--text-muted": "#6B7684",
+            "--accent-primary": "#3182F6",
+        },
+    },
 }
 
 
@@ -215,7 +265,8 @@ def scan_anti_slop(
         for dirpath, dirnames, filenames in os.walk(root_dir):
             dirnames[:] = [
                 d for d in dirnames
-                if d not in EXCLUDED_DIRS and d not in {"tests", "docs", "artifacts", "backups", "logs"}
+                if d not in EXCLUDED_DIRS
+                and d not in {"tests", "docs", "artifacts", "backups", "logs", "deployment", "products", "dogfood-sandbox", "archive"}
             ]
             for fname in sorted(filenames):
                 fpath = Path(dirpath) / fname
