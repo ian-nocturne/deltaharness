@@ -1,0 +1,10 @@
+DeltaHarness (PRISM Memory Engine) License Notice
+Copyright (c) 2026 DeltaHarness / PRISM Contributors. All rights reserved.
+
+1. Core Engine & SDK (`prism_memory`, `memory_intelligence.py`, `memory_skills.py`, `memory_vectors.py`, `memory_cli.py`, `prism_memory_mcp.py`, `work_memory.py`):
+   Clean-room original implementation written over the Python standard library (`sqlite3`, `ast`, `re`, `hashlib`, `math`).
+   Commercial distribution and enterprise deployment terms are governed by the applicable DeltaHarness license agreement or open-core distribution license selected by the copyright holder.
+
+2. Third-Party Runtime Dependencies & Bundled Model Weights:
+   Optional runtime components (`onnxruntime`, `tokenizers`, `numpy`) and the optional local multilingual embedding model (`multilingual-e5-small` / `Xenova/multilingual-e5-small`) are distributed under their respective permissive open-source licenses (MIT, Apache-2.0, BSD-3-Clause).
+   See `THIRD_PARTY_NOTICES.md` and `memory_models/e5-small/LICENSE` for full copyright and license texts.

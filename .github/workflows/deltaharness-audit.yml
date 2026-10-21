@@ -1,0 +1,47 @@
+name: DeltaHarness Audit & Preflight Gate
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Gate mode (audit, rescue, anti-slop, all)"
+        required: false
+        default: "all"
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  deltaharness-gate:
+    name: "DeltaHarness · Instruction Drift & VibeRescue Preflight"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run DeltaHarness Audit + VibeRescue + Anti-Slop Gate
+        id: gate
+        uses: ./
+        with:
+          mode: ${{ github.event.inputs.mode || 'audit' }}
+          repo-path: "."
+          base-ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          head-ref: "HEAD"
+          fail-on-drift: "true"
+          sarif-file: "deltaharness-audit.sarif"
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always() && hashFiles('deltaharness-audit.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: deltaharness-audit.sarif
+          category: deltaharness-instruction-drift

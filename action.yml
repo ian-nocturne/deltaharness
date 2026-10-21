@@ -1,0 +1,141 @@
+name: "DeltaHarness Audit & VibeRescue Gate"
+description: "Zero-setup repository instruction drift auditor (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `SKILL.md`), VibeRescue environment preflight, and Anti-Slop UI/Copy gate."
+author: "DeltaHarness Architecture Team"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  mode:
+    description: "Gate mode to execute: 'audit' (instruction/symbol drift), 'rescue' (env/deploy cliff bundle), 'anti-slop' (UI/copy slop score), or 'all'."
+    required: false
+    default: "audit"
+  repo-path:
+    description: "Target repository path to scan."
+    required: false
+    default: "."
+  base-ref:
+    description: "Optional Git base ref (e.g. origin/main or github.event.pull_request.base.sha) for blast-radius diff analysis."
+    required: false
+    default: ""
+  head-ref:
+    description: "Git head ref for diff analysis."
+    required: false
+    default: "HEAD"
+  format:
+    description: "Output format for audit: 'markdown', 'json', or 'sarif'."
+    required: false
+    default: "markdown"
+  fail-on-drift:
+    description: "Exit with non-zero code if high-severity drift or deploy blockers are detected ('true' or 'false')."
+    required: false
+    default: "true"
+  sarif-file:
+    description: "Optional path to write SARIF v2.1.0 output for GitHub Code Scanning."
+    required: false
+    default: "deltaharness-audit.sarif"
+
+outputs:
+  status:
+    description: "Overall gate status ('PASS' or 'DRIFT_DETECTED')."
+    value: ${{ steps.run-gate.outputs.status }}
+  finding-count:
+    description: "Total number of drift/blocker findings."
+    value: ${{ steps.run-gate.outputs.finding_count }}
+  slop-score:
+    description: "AI Slop Score (0-100, lower is cleaner) when mode includes 'anti-slop'."
+    value: ${{ steps.run-gate.outputs.slop_score }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Run DeltaHarness Gate
+      id: run-gate
+      shell: bash
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_REPO_PATH: ${{ inputs.repo-path }}
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_HEAD_REF: ${{ inputs.head-ref }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_FAIL_ON_DRIFT: ${{ inputs.fail-on-drift }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        export PYTHONPATH="${ACTION_PATH}:${PYTHONPATH:-}"
+
+        python3 - <<'PYEOF'
+        import json
+        import os
+        import pathlib
+        import sys
+
+        from prism_memory.audit import audit_repository, format_audit_markdown, format_audit_sarif
+        from prism_memory.viberescue import build_rescue_bundle
+        from prism_memory.anti_slop import scan_anti_slop
+
+        mode = os.environ.get("INPUT_MODE", "audit").strip().lower()
+        repo_path = os.environ.get("INPUT_REPO_PATH", ".").strip() or "."
+        base_ref = os.environ.get("INPUT_BASE_REF", "").strip() or None
+        head_ref = os.environ.get("INPUT_HEAD_REF", "HEAD").strip() or "HEAD"
+        fail_on_drift = os.environ.get("INPUT_FAIL_ON_DRIFT", "true").strip().lower() == "true"
+        sarif_file = os.environ.get("INPUT_SARIF_FILE", "deltaharness-audit.sarif").strip()
+
+        summary_lines = []
+        total_findings = 0
+        slop_score = 0
+        has_blocker = False
+
+        if mode in ("audit", "all"):
+            audit_res = audit_repository(repo_path, base_ref=base_ref, head_ref=head_ref, output_format="json")
+            findings = audit_res.get("findings", [])
+            total_findings += len(findings)
+            if findings:
+                has_blocker = True
+            md_report = format_audit_markdown(audit_res)
+            summary_lines.append(md_report)
+            if sarif_file:
+                sarif_payload = format_audit_sarif(audit_res)
+                pathlib.Path(sarif_file).write_text(json.dumps(sarif_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        if mode in ("rescue", "all"):
+            rescue_res = build_rescue_bundle(repo_path, write_files=False)
+            blockers = rescue_res.get("blockers", [])
+            total_findings += len(blockers)
+            if any(b.get("severity") == "critical" for b in blockers):
+                has_blocker = True
+            summary_lines.append(rescue_res.get("rescueBriefMarkdown", ""))
+
+        if mode in ("anti-slop", "all"):
+            slop_res = scan_anti_slop(repo_path)
+            slop_score = slop_res.get("slopScore", 0)
+            total_findings += len(slop_res.get("findings", []))
+            if slop_score >= 40:
+                has_blocker = True
+            summary_lines.append(slop_res.get("markdownReport", ""))
+
+        full_summary = "\n\n---\n\n".join(s for s in summary_lines if s)
+        print(full_summary)
+
+        step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if step_summary:
+            with open(step_summary, "a", encoding="utf-8") as fp:
+                fp.write(full_summary + "\n")
+
+        gh_out = os.environ.get("GITHUB_OUTPUT")
+        status = "DRIFT_DETECTED" if has_blocker else "PASS"
+        if gh_out:
+            with open(gh_out, "a", encoding="utf-8") as fp:
+                fp.write(f"status={status}\n")
+                fp.write(f"finding_count={total_findings}\n")
+                fp.write(f"slop_score={slop_score}\n")
+
+        if fail_on_drift and has_blocker:
+            sys.exit(1)
+        PYEOF

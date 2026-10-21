@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prism-memory"
+version = "8.3.0"
+description = "DeltaHarness (PRISM Memory) — Zero-Setup Instruction Drift Auditor, Bitemporal Skill Engine & VibeRescue Kit"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+    {name = "DeltaHarness Architecture Team"}
+]
+dependencies = []
+
+[project.optional-dependencies]
+semantic = [
+    "numpy>=1.24",
+    "onnxruntime>=1.16",
+    "tokenizers>=0.15",
+]
+
+[project.scripts]
+prism-memory = "memory_cli:cli"
+prism-memory-mcp = "prism_memory_mcp:main"
+deltaharness = "memory_cli:cli"
+deltaharness-mcp = "prism_memory_mcp:main"
+viberescue = "prism_memory.viberescue:cli"
+anti-slop = "prism_memory.anti_slop:cli"
+
+
+[tool.setuptools]
+packages = ["prism_memory"]
+py-modules = [
+    "work_memory",
+    "memory_vectors",
+    "memory_skills",
+    "memory_intelligence",
+    "memory_cli",
+    "prism_memory_mcp",
+]
