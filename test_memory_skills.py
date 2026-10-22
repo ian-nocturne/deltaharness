@@ -11,13 +11,18 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_mb_dir = Path.home() / '.gemini' / 'antigravity' / 'mobile-bridge'
+if _mb_dir.is_dir() and str(_mb_dir) not in sys.path:
+    sys.path.append(str(_mb_dir))
 
 import work_memory as ledger
 import memory_intelligence as memory
 import memory_skills as skills_ledger
-from work_store import WorkStore
-from work_service import WorkService
+try:
+    from work_store import WorkStore
+    from work_service import WorkService
+except ImportError:
+    from prism_memory.standalone import StandaloneStore as WorkStore, StandaloneService as WorkService
 
 OWNER = '19f22446-0dce-4dce-945b-6011b559e10c'
 CLI = str(Path(__file__).resolve().parent / 'memory_cli.py')
@@ -3022,10 +3027,13 @@ class MemorySkillsLoopTests(unittest.TestCase):
                 encoding='utf-8',
             )
 
-            # Run VibeRescue bundler
+            # Run VibeRescue bundler (must report ok=False, exitCode=1, readiness=BLOCKED when critical blockers exist)
             rescue = build_rescue_bundle(repo_dir, write_files=True, output_format='markdown')
-            self.assertTrue(rescue['ok'])
+            self.assertFalse(rescue['ok'])
+            self.assertEqual(1, rescue['exitCode'])
+            self.assertEqual('BLOCKED', rescue['readiness'])
             self.assertFalse(rescue['secretSafety']['rawEnvValuesIncluded'])
+            self.assertTrue(rescue['secretSafety']['verifiedOutputClean'])
             # Ensure the secret value is NEVER present anywhere in JSON or Markdown
             serialized_rescue = json.dumps(rescue, ensure_ascii=False)
             self.assertNotIn(secret_token, serialized_rescue)
@@ -3040,9 +3048,10 @@ class MemorySkillsLoopTests(unittest.TestCase):
             self.assertTrue((repo_dir / 'RESCUE_BRIEF.md').exists())
             self.assertTrue((repo_dir / 'ONE_PROMPT_RESCUE.md').exists())
 
-            # Run Anti-Slop scanner before locking design system
+            # Run Anti-Slop scanner before locking design system (must report ok=False, exitCode=1 when slopScore >= 20)
             slop = scan_anti_slop(repo_dir, output_format='markdown')
-            self.assertTrue(slop['ok'])
+            self.assertFalse(slop['ok'])
+            self.assertEqual(1, slop['exitCode'])
             self.assertGreater(slop['slopScore'], 30)
             slop_cats = set(slop['byCategory'].keys())
             self.assertIn('missing_design_lock', slop_cats)
@@ -3057,7 +3066,7 @@ class MemorySkillsLoopTests(unittest.TestCase):
             self.assertTrue((repo_dir / 'DESIGN.md').exists())
             self.assertTrue((repo_dir / 'design-tokens.css').exists())
 
-            # Clean the component and re-scan -> must achieve 0 Slop Score (Grade A+)
+            # Clean the component and re-scan -> must achieve 0 Slop Score (Grade A+, ok=True, exitCode=0)
             (comp_dir / 'HeroCard.tsx').write_text(
                 '"use client";\n'
                 'export function HeroCard() {\n'
@@ -3071,12 +3080,223 @@ class MemorySkillsLoopTests(unittest.TestCase):
                 encoding='utf-8',
             )
             clean_slop = scan_anti_slop(repo_dir)
+            self.assertTrue(clean_slop['ok'])
+            self.assertEqual(0, clean_slop['exitCode'])
             self.assertEqual(0, clean_slop['slopScore'])
             self.assertEqual('A+', clean_slop['grade'])
+
+    def test_v84_astra_adversarial_edge_cases_and_standalone_service(self):
+        """Verify all adversarial counterexamples from gpt-6-astra:high Round 1 Audit:
+        1) Commented-out JS/TS code & Markdown HTML comments do not fool `audit_repository`.
+        2) Monorepo `cd packages/core && pnpm test` context resolution & `.github/workflows/*.yml` resolution.
+        3) Single-identifier arrow function (`export const id = x => x`) and React `memo`/`forwardRef` HOC extraction.
+        4) Invalid `--base` Git ref emits `invalid_git_ref` (`ok=False`, `exitCode=1`); broken TS syntax emits `syntax_error`.
+        5) `viberescue`: bracket env (`process.env["STRIPE_SECRET_KEY"]`), `import "server-only"`, multi-file SQL migrations,
+           `supabase_rls_enabled_without_policy`, multiline `USING (\\n true \\n)`, empty directory (`NO_TARGETS_FOUND`, `exitCode=2`),
+           and `ENV_UNVERIFIED` vs `STATIC_CHECKS_PASSED`.
+        6) `anti_slop`: empty directory (`UNVERIFIED`, `exitCode=2`), `.js`/`.mjs` and `products/` scanning, comment stripping,
+           CSS variable gradient resolution (`var(--blob)`), WCAG contrast check (`low_contrast_text`), 3+ nested bordered cards in HTML,
+           attribute-order-independent viewport zoom block, `apple-minimal` preset, and `--lock` overwrite protection (`--force`).
+        7) `StandaloneStore` + `StandaloneService` full drop-in execution without `WorkStore` or `config_state`.
+        """
+        from prism_memory import (
+            audit_repository,
+            build_rescue_bundle,
+            scan_anti_slop,
+            lock_design_system,
+            extract_file_symbol_signatures,
+        )
+        from prism_memory.standalone import StandaloneService
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+
+            # 1. Empty directory checks (must NEVER return CLEAN_READY or A+)
+            empty_dir = base / 'empty_folder'
+            empty_dir.mkdir(parents=True, exist_ok=True)
+            empty_rescue = build_rescue_bundle(empty_dir)
+            self.assertFalse(empty_rescue['ok'])
+            self.assertEqual(2, empty_rescue['exitCode'])
+            self.assertEqual('NO_TARGETS_FOUND', empty_rescue['readiness'])
+
+            empty_slop = scan_anti_slop(empty_dir)
+            self.assertFalse(empty_slop['ok'])
+            self.assertEqual(2, empty_slop['exitCode'])
+            self.assertEqual('UNVERIFIED', empty_slop['grade'])
+
+            # 2. Commented-out JS/TS exports, HOC wrappers, single-identifier arrow functions, and broken syntax
+            adv_repo = base / 'adv_repo'
+            (adv_repo / 'packages' / 'core').mkdir(parents=True, exist_ok=True)
+            (adv_repo / '.github' / 'workflows').mkdir(parents=True, exist_ok=True)
+            (adv_repo / '.github' / 'workflows' / 'ci.yml').write_text('name: CI\n', encoding='utf-8')
+            (adv_repo / 'package.json').write_text(json.dumps({'name': 'root', 'scripts': {'build': 'turbo build'}}), encoding='utf-8')
+            (adv_repo / 'packages' / 'core' / 'package.json').write_text(
+                json.dumps({'name': '@adv/core', 'scripts': {'test': 'vitest run'}}),
+                encoding='utf-8',
+            )
+
+            ts_mod = adv_repo / 'packages' / 'core' / 'index.ts'
+            ts_mod.write_text(
+                "/*\n"
+                "export function commentedOutGhost(a: string, b: number) { return a; }\n"
+                "*/\n"
+                "// export const anotherGhost = (x: number) => x;\n"
+                "export const identity = x => x;\n"
+                "export const MemoWidget = React.memo(function MemoWidget(props: { title: string }) {\n"
+                "  return null;\n"
+                "});\n",
+                encoding='utf-8',
+            )
+            sigs = extract_file_symbol_signatures(ts_mod)
+            self.assertTrue(sigs['__syntax_ok__'])
+            self.assertNotIn('commentedOutGhost', sigs['symbols'])
+            self.assertNotIn('anotherGhost', sigs['symbols'])
+            self.assertIn('identity', sigs['symbols'])
+            self.assertIn('MemoWidget', sigs['symbols'])
+
+            # Monorepo AGENTS.md with HTML comments, `cd packages/core`, and workflow file reference
+            (adv_repo / 'AGENTS.md').write_text(
+                "# Monorepo Guide\n"
+                "<!-- Ignore `src/nonexistent_in_comment.py` and `packages/core/index.ts::commentedOutGhost` -->\n"
+                "1. Check workflow `ci.yml`.\n"
+                "2. Run package tests:\n"
+                "   `cd packages/core`\n"
+                "   `pnpm test`\n"
+                "3. Use `packages/core/index.ts::identity` and `packages/core/index.ts::MemoWidget`.\n",
+                encoding='utf-8',
+            )
+            monorepo_audit = audit_repository(adv_repo)
+            self.assertTrue(monorepo_audit['ok'], msg=monorepo_audit['findings'])
+            self.assertEqual(0, monorepo_audit['errorCount'])
+
+            # Reference the commented-out function -> must flag missing_symbol!
+            (adv_repo / 'CLAUDE.md').write_text(
+                "Call `packages/core/index.ts::commentedOutGhost`.\n",
+                encoding='utf-8',
+            )
+            comment_audit = audit_repository(adv_repo)
+            self.assertFalse(comment_audit['ok'])
+            self.assertIn('missing_symbol', comment_audit['countsByRule'])
+
+            # Broken TS syntax -> must flag syntax_error!
+            broken_ts = adv_repo / 'packages' / 'core' / 'broken.ts'
+            broken_ts.write_text("export function brokenFn(a: string {\n  return a;\n", encoding='utf-8')
+            (adv_repo / 'CLAUDE.md').write_text("See `packages/core/broken.ts`.\n", encoding='utf-8')
+            syn_audit = audit_repository(adv_repo)
+            self.assertFalse(syn_audit['ok'])
+            self.assertIn('syntax_error', syn_audit['countsByRule'])
+
+            # Invalid Git base ref -> must flag invalid_git_ref!
+            subprocess.run(['git', 'init'], cwd=str(adv_repo), check=True, capture_output=True)
+            bad_ref_audit = audit_repository(adv_repo, base_ref='nonexistent-git-ref-9999')
+            self.assertFalse(bad_ref_audit['ok'])
+            self.assertIn('invalid_git_ref', bad_ref_audit['countsByRule'])
+
+            # 3. VibeRescue adversarial edge cases
+            vr_repo = base / 'vr_adv'
+            (vr_repo / 'src').mkdir(parents=True, exist_ok=True)
+            (vr_repo / 'supabase' / 'migrations').mkdir(parents=True, exist_ok=True)
+            # Server-only module using secret -> must NOT be flagged as client exposure
+            (vr_repo / 'src' / 'server_billing.ts').write_text(
+                'import "server-only";\n'
+                'export const key = process.env["STRIPE_SECRET_KEY"];\n',
+                encoding='utf-8',
+            )
+            # Client module using bracket notation secret -> MUST be flagged as client_secret_exposure
+            # Commented-out secret -> must NOT be flagged
+            (vr_repo / 'src' / 'client_pay.tsx').write_text(
+                '"use client";\n'
+                '// const safeComment = process.env.OPENAI_API_KEY;\n'
+                'export const leaked = process.env["STRIPE_SECRET_KEY"];\n',
+                encoding='utf-8',
+            )
+            # Multi-file SQL migrations: table1 has RLS + policy across 2 files; table2 has RLS enabled but 0 policies; table3 has multiline USING (true)
+            (vr_repo / 'supabase' / 'migrations' / '001_tables.sql').write_text(
+                'CREATE TABLE public.orders (id uuid primary key, user_id uuid);\n'
+                'CREATE TABLE public.audit_logs (id uuid primary key);\n'
+                'CREATE TABLE public.profiles (id uuid primary key);\n',
+                encoding='utf-8',
+            )
+            (vr_repo / 'supabase' / 'migrations' / '002_rls.sql').write_text(
+                'ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;\n'
+                'CREATE POLICY "orders_owner" ON public.orders FOR ALL USING (auth.uid() = user_id);\n'
+                'ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;\n'
+                'ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;\n'
+                'CREATE POLICY "open_profiles" ON public.profiles FOR SELECT USING (\n  true\n);\n',
+                encoding='utf-8',
+            )
+            vr_res = build_rescue_bundle(vr_repo)
+            self.assertFalse(vr_res['ok'])
+            vr_msgs = "\n".join(b['message'] for b in vr_res['blockers'])
+            # orders must NOT be flagged because 002_rls.sql enables RLS and adds a valid policy
+            self.assertNotIn('`orders`', vr_msgs)
+            # audit_logs MUST be flagged for RLS enabled without policy
+            self.assertIn('`audit_logs`', vr_msgs)
+            # profiles MUST be flagged for multiline USING (true)
+            self.assertIn('`profiles`', vr_msgs)
+            # client_pay.tsx bracket notation MUST be flagged, server_billing.ts must NOT
+            client_exposures = [b for b in vr_res['blockers'] if b['kind'] == 'client_secret_exposure']
+            self.assertEqual(1, len(client_exposures))
+            self.assertIn('client_pay.tsx', client_exposures[0]['file'])
+
+            # 4. Anti-Slop adversarial edge cases
+            slop_repo = base / 'slop_adv'
+            (slop_repo / 'products').mkdir(parents=True, exist_ok=True)
+            # Empty DESIGN.md and comment-only design-tokens.css -> must flag missing_design_lock
+            (slop_repo / 'DESIGN.md').write_text('', encoding='utf-8')
+            (slop_repo / 'design-tokens.css').write_text('/* only comment */\n', encoding='utf-8')
+            # CSS with var(--blob) purple and low WCAG contrast (#1E293B on #0F172A = 1.27:1)
+            (slop_repo / 'styles.css').write_text(
+                ':root { --blob: #8b5cf6; --bg-dark: #0F172A; --fg-dim: #1E293B; }\n'
+                '.hero { background: radial-gradient(circle, var(--blob), transparent); }\n'
+                '.btn { background-color: var(--bg-dark); color: var(--fg-dim); }\n',
+                encoding='utf-8',
+            )
+            # HTML with 3 nested bordered cards and reversed-order viewport zoom block
+            (slop_repo / 'products' / 'landing.html').write_text(
+                '<!doctype html><html><head>\n'
+                '<meta content="width=device-width, user-scalable=no, initial-scale=1" name="viewport">\n'
+                '</head><body>\n'
+                '<!-- 🚀 commented out emoji and 13.5px should be ignored -->\n'
+                '<div class="card border"><div class="panel border"><div class="box border">Nested</div></div></div>\n'
+                '</body></html>\n',
+                encoding='utf-8',
+            )
+            adv_slop = scan_anti_slop(slop_repo)
+            self.assertFalse(adv_slop['ok'])
+            adv_cats = set(adv_slop['byCategory'].keys())
+            self.assertIn('missing_design_lock', adv_cats)
+            self.assertIn('purple_radial_blob_slop', adv_cats)
+            self.assertIn('low_contrast_text', adv_cats)
+            self.assertIn('nested_card_box_slop', adv_cats)
+            self.assertIn('viewport_zoom_block', adv_cats)
+            self.assertNotIn('emoji_chrome_slop', adv_cats)
+            self.assertNotIn('fractional_font_slop', adv_cats)
+
+            # Test apple-minimal preset and overwrite protection
+            (slop_repo / 'DESIGN.md').write_text('# Custom User Design Lock\nDo not overwrite me without --force.\n', encoding='utf-8')
+            (slop_repo / 'design-tokens.css').write_text(':root { --bg-canvas: #ffffff; --text-primary: #111111; }\n', encoding='utf-8')
+            with self.assertRaises(FileExistsError):
+                lock_design_system(slop_repo, archetype='apple-minimal', write_files=True, force=False)
+            self.assertIn('Custom User Design Lock', (slop_repo / 'DESIGN.md').read_text(encoding='utf-8'))
+
+            forced_lock = lock_design_system(slop_repo, archetype='apple-minimal', write_files=True, force=True)
+            self.assertTrue(forced_lock['ok'])
+            self.assertTrue((slop_repo / 'DESIGN.md.bak').exists())
+            self.assertIn('Apple Human Interface', (slop_repo / 'DESIGN.md').read_text(encoding='utf-8'))
+
+            # 5. StandaloneService full smoke test
+            svc = StandaloneService(base / 'standalone_svc_root')
+            svc.store.create('prism-memory', 'Standalone Task', OWNER, goal='Standalone verification', task='task-sa')
+            aug = svc.augment_turn(OWNER, '스탠드얼론 서비스 점검', '스탠드얼론 서비스 점검', 'req-sa-1')
+            self.assertEqual('스탠드얼론 서비스 점검', svc.strip_memory_for_display(aug))
+            st = svc.action({'action': 'memory_stats', 'taskId': 'task-sa'})
+            self.assertTrue(st['ok'])
 
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
 
 
 

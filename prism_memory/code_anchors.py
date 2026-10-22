@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 _FILE_HASH_AST_CACHE = {}
 _FILE_SIGNATURE_CACHE = {}
@@ -299,15 +300,129 @@ def _extract_brace_block(src_text: str, open_brace_idx: int) -> str:
     return src_text[open_brace_idx:]
 
 
-def _strip_js_comments(text: str) -> str:
-    no_block = re.sub(r"/\*[\s\S]*?\*/", "", text)
-    lines = []
-    for ln in no_block.splitlines():
-        s = ln.strip()
-        if s.startswith("//"):
+def _blank_js_comments_preserve_lines(text: str) -> Tuple[str, bool]:
+    """Replace JS/TS block and line comments with spaces (preserving newlines) and check syntax balance."""
+    out: list[str] = []
+    n = len(text)
+    i = 0
+    in_str: Optional[str] = None
+    in_regex = False
+    in_regex_class = False
+    in_line_comment = False
+    in_block_comment = False
+    stack: list[str] = []
+    pairs = {")": "(", "}": "{", "]": "["}
+    syntax_ok = True
+    last_non_ws = ""
+
+    while i < n:
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+                out.append("\n")
+            else:
+                out.append(" ")
+            i += 1
             continue
-        lines.append(s)
-    return "\n".join(ln for ln in lines if ln)
+
+        if in_block_comment:
+            if ch == "*" and nxt == "/":
+                out.append("  ")
+                in_block_comment = False
+                i += 2
+            else:
+                out.append("\n" if ch == "\n" else " ")
+                i += 1
+            continue
+
+        if in_regex:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == "\n":
+                in_regex = False
+                in_regex_class = False
+            elif ch == "[" and not in_regex_class:
+                in_regex_class = True
+            elif ch == "]" and in_regex_class:
+                in_regex_class = False
+            elif ch == "/" and not in_regex_class:
+                in_regex = False
+                last_non_ws = "/"
+            i += 1
+            continue
+
+        if in_str is not None:
+            out.append(ch)
+            if ch == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == "\n" and in_str in ("'", '"'):
+                syntax_ok = False
+                in_str = None
+            elif ch == in_str:
+                in_str = None
+                last_non_ws = ch
+            i += 1
+            continue
+
+        if ch == "/" and nxt == "/":
+            out.append("  ")
+            in_line_comment = True
+            i += 2
+            continue
+
+        if ch == "/" and nxt == "*":
+            out.append("  ")
+            in_block_comment = True
+            i += 2
+            continue
+
+        if (
+            ch == "/"
+            and nxt not in ("/", "*", "=", " ", "\t", "\n", "\r", "")
+            and (not last_non_ws or last_non_ws in "=(,:[!&|?{};~+-*%^<>")
+        ):
+            in_regex = True
+            in_regex_class = False
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch in ("'", '"', "`"):
+            in_str = ch
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch in ("(", "{", "["):
+            stack.append(ch)
+        elif ch in (")", "}", "]"):
+            if not stack or stack[-1] != pairs[ch]:
+                syntax_ok = False
+            else:
+                stack.pop()
+
+        if not ch.isspace():
+            last_non_ws = ch
+        out.append(ch)
+        i += 1
+
+    if in_block_comment or in_str is not None or stack:
+        syntax_ok = False
+
+    return "".join(out), syntax_ok
+
+
+def _strip_js_comments(text: str) -> str:
+    blanked, _ = _blank_js_comments_preserve_lines(text)
+    return "\n".join(ln.strip() for ln in blanked.splitlines() if ln.strip())
 
 
 def _build_ts_func_sig(is_async: bool, raw_params: str, body_text: str) -> dict:
@@ -337,8 +452,9 @@ def _build_ts_func_sig(is_async: bool, raw_params: str, body_text: str) -> dict:
     return sig
 
 
-def _extract_ts_js_signatures(src_text: str) -> dict:
-    """Extract function, arrow function, class, method, interface, and type contracts from TS/JS."""
+def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
+    """Extract function, arrow function, HOC wrapper, class, method, interface, and type contracts from TS/JS."""
+    src_text, syntax_ok = _blank_js_comments_preserve_lines(raw_src_text)
     sigs = {}
 
     # 1. Standard function declarations: [export] [default] [async] function Name[<T>](params)
@@ -353,14 +469,14 @@ def _extract_ts_js_signatures(src_text: str) -> dict:
         body_block = _extract_brace_block(src_text, brace_pos) if brace_pos != -1 else m.group(0)
         sigs[name] = _build_ts_func_sig(is_async, raw_params, body_block)
 
-    # 2. Arrow function / function expression assignments: [export] const/let/var Name [: Type] = [async] [<T>](params) [: Ret] =>
+    # 2. Arrow function / function expression assignments (supports both `(a, b) =>` and single-identifier `x =>`)
     arrow_pat = re.compile(
-        r"(?m)^[ \t]*(?:export[ \t]+)?(?:const|let|var)[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?::[^=]+)?=[ \t]*(async[ \t]+)?(?:<[^>({\n]*>[ \t]*)?\(([^)]*)\)[ \t]*(?::[^=]+)?=>"
+        r"(?m)^[ \t]*(?:export[ \t]+)?(?:const|let|var)[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?::[^=\n]+)?=[ \t]*(async[ \t]+)?(?:<[^>({\n]*>[ \t]*)?(?:\(([^)]*)\)|([A-Za-z_$][A-Za-z0-9_$]*))[ \t]*(?::[^=\n>]+)?=>"
     )
     for m in arrow_pat.finditer(src_text):
         name = m.group(1)
         is_async = bool(m.group(2))
-        raw_params = m.group(3) or ""
+        raw_params = m.group(3) if m.group(3) is not None else (m.group(4) or "")
         rest = src_text[m.end():].lstrip()
         if rest.startswith("{"):
             brace_pos = src_text.find("{", m.end())
@@ -368,6 +484,29 @@ def _extract_ts_js_signatures(src_text: str) -> dict:
         else:
             body_block = rest.splitlines()[0] if rest else m.group(0)
         sigs[name] = _build_ts_func_sig(is_async, raw_params, body_block)
+
+    # 2b. React HOC wrappers: memo(function App(...) {}), React.memo(...), forwardRef(...)
+    hoc_pat = re.compile(
+        r"(?m)^[ \t]*(?:export[ \t]+)?(?:default[ \t]+)?(?:(?:const|let|var)[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?::[^=\n]+)?=[ \t]*)?"
+        r"(?:React\.)?(?:memo|forwardRef)[ \t]*(?:<[^>(\n]*>)?[ \t]*\([ \t]*"
+        r"(?:(async[ \t]+)?function(?:[ \t]+([A-Za-z_$][A-Za-z0-9_$]*))?[ \t]*\(([^)]*)\)|(async[ \t]+)?(?:\(([^)]*)\)|([A-Za-z_$][A-Za-z0-9_$]*))[ \t]*=>)"
+    )
+    for m in hoc_pat.finditer(src_text):
+        var_name = m.group(1)
+        fn_async = bool(m.group(2) or m.group(5))
+        fn_name = m.group(3)
+        raw_params = (
+            m.group(4)
+            if m.group(4) is not None
+            else (m.group(6) if m.group(6) is not None else (m.group(7) or ""))
+        )
+        brace_pos = src_text.find("{", m.end())
+        body_block = _extract_brace_block(src_text, brace_pos) if brace_pos != -1 else m.group(0)
+        sig = _build_ts_func_sig(fn_async, raw_params, body_block)
+        if var_name:
+            sigs[var_name] = sig
+        if fn_name:
+            sigs[fn_name] = sig
 
     # 3. Classes and their methods: [export] [default] [abstract] class Name
     class_pat = re.compile(
@@ -506,7 +645,7 @@ def _extract_ts_js_signatures(src_text: str) -> dict:
         }
         sigs[tname] = tsig
 
-    return sigs
+    return syntax_ok, sigs
 
 
 def _extract_package_json_signatures(src_text: str):
@@ -660,8 +799,8 @@ def extract_file_symbol_signatures(file_path):
             resolution = "parse_error"
     elif suffix_lower in _TS_JS_EXTS:
         language = "typescript" if suffix_lower in (".ts", ".tsx") else "javascript"
-        resolution = "contract"
-        sigs = _extract_ts_js_signatures(src_text)
+        syntax_ok, sigs = _extract_ts_js_signatures(src_text)
+        resolution = "contract" if syntax_ok else "parse_error"
     elif name_lower == "package.json":
         language = "package_json"
         ok_json, sigs = _extract_package_json_signatures(src_text)

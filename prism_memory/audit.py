@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -100,10 +101,41 @@ YARN_SHORT_SCRIPT_RE = re.compile(
     r"`(?:yarn|pnpm)\s+(?P<script>(?!install\b|add\b|remove\b|dlx\b|exec\b|init\b|why\b|config\b|--|-)[A-Za-z0-9_:.-]+)`"
 )
 
-# Matches `make <target>` inside backticks or command lines
+# Matches `make <target>` inside backticks or explicit shell command lines
 MAKE_TARGET_RE = re.compile(
-    r"`make\s+(?P<target>(?!-)[A-Za-z0-9_.-]+)`|(?:^|\s)make\s+(?P<target2>(?!-)[A-Za-z0-9_.-]+)(?:\s|$|`)"
+    r"`make\s+(?P<target>(?!-)[A-Za-z0-9_.-]+)`|^\s*(?:\$\s*)?make\s+(?P<target2>(?!-)[A-Za-z0-9_.-]+)\s*$"
 )
+
+MAKE_PROSE_STOPWORDS = {
+    "a",
+    "an",
+    "the",
+    "sure",
+    "it",
+    "this",
+    "that",
+    "existing",
+    "new",
+    "changes",
+    "change",
+    "use",
+    "sense",
+    "up",
+    "out",
+    "for",
+    "from",
+    "with",
+    "into",
+    "all",
+    "any",
+    "some",
+    "more",
+    "less",
+    "your",
+    "our",
+    "their",
+    "them",
+}
 
 # Matches inline function calls like `charge_customer(a, b)` or `chargeCustomer(u1, 100, { currency: 'USD' })`
 INLINE_CALL_RE = re.compile(
@@ -138,6 +170,13 @@ IGNORED_FILE_TOKENS = {
     "package.json",
     "makefile",
     "pyproject.toml",
+    "kebab-case.ts",
+    "kebab-case.tsx",
+    "kebab-case.test.ts",
+    "kebab-case.test-d.ts",
+    "usepagename.ts",
+    "usecomponentname.ts",
+    "componentname/componentname.tsx",
 }
 
 PYTHON_BUILTINS_AND_COMMON = {
@@ -322,6 +361,9 @@ def _check_inline_call_vs_signature(
 
     satisfied_pos_by_kw = sum(1 for k in kw_names if k in pos_names)
     effective_pos = pos_count + satisfied_pos_by_kw
+    if pos_count == 0 and not kw_names:
+        # Empty `func()` in documentation prose is standard shorthand for naming a function
+        return None
     if effective_pos < min_pos:
         return (
             f"`{sym_name}` 호출의 위치 인자({effective_pos}개)가 최소 필수 인자({min_pos}개: {req_args})보다 적어요."
@@ -471,10 +513,35 @@ def audit_repository(
     if pkg_json_path.is_file():
         pkg_scripts = _get_sigs(pkg_json_path).get("symbols") or {}
 
+    # Pre-load workspace package.json scripts (packages/*, apps/*, examples/*)
+    workspace_pkg_scripts: Dict[str, Dict[str, Any]] = {}
+    for ws_glob in ("packages/*/package.json", "apps/*/package.json", "examples/*/package.json"):
+        for wp in sorted(root.glob(ws_glob)):
+            if wp.is_file():
+                rel_dir = str(wp.parent.relative_to(root)).replace("\\", "/")
+                workspace_pkg_scripts[rel_dir] = _get_sigs(wp).get("symbols") or {}
+
     makefile_path = root / "Makefile"
     make_targets: Optional[Dict[str, Any]] = None
     if makefile_path.is_file():
         make_targets = _get_sigs(makefile_path).get("symbols") or {}
+
+    # Pre-index repo files by basename and relative path suffix for monorepo/subpackage resolution
+    by_basename: Dict[str, List[Path]] = {}
+    all_rel_paths: List[Tuple[str, Path]] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in EXCLUDED_DIRS and not d.startswith(".git") and not d.startswith(".venv")
+        ]
+        for fn in filenames:
+            p_full = Path(dirpath) / fn
+            try:
+                rel_s = str(p_full.relative_to(root)).replace("\\", "/")
+            except ValueError:
+                continue
+            by_basename.setdefault(fn, []).append(p_full)
+            all_rel_paths.append((rel_s, p_full))
 
     git_diff_data: Optional[Dict[str, Any]] = None
     if base_ref:
@@ -511,20 +578,71 @@ def audit_repository(
             "remediation": remediation,
         })
 
+    if git_diff_data and git_diff_data.get("error"):
+        _add_finding(
+            rule_id="invalid_git_ref",
+            severity="error",
+            doc_rel="(git-diff)",
+            line_no=1,
+            target_path=str(base_ref or ""),
+            symbol=str(head_ref or "HEAD"),
+            message=f"Git diff 참조(`{base_ref}..{head_ref}`)를 해석할 수 없어요: {git_diff_data['error']}",
+            remediation="존재하는 Git 브랜치·태그·커밋 SHA를 `--base` 및 `--head`에 지정하세요.",
+        )
+
+    cd_cmd_re = re.compile(r"(?:^|[`;&|]\s*|\$\s*)cd\s+([A-Za-z0-9_./-]+)")
+    pkg_dir_hint_re = re.compile(
+        r"(?:inside\s+(?:the\s+)?package\s+directory|in\s+each\s+package|package\s+directory|packages/[A-Za-z0-9_.-]+|examples/[A-Za-z0-9_.-]+|apps/[A-Za-z0-9_.-]+)",
+        re.IGNORECASE,
+    )
+    tutorial_create_re = re.compile(
+        r"(?:create\s+(?:a\s+|an\s+)?(?:new\s+)?(?:file|server|script)|save\s+(?:it\s+)?as|touch\s+|cat\s*<<|파일을\s*생성|새로\s*만들)",
+        re.IGNORECASE,
+    )
+
     for doc_path in docs:
         try:
             doc_rel = str(doc_path.relative_to(root))
-            lines = doc_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            raw_doc_text = doc_path.read_text(encoding="utf-8", errors="replace")
+            # Strip HTML comments <!-- ... --> while preserving exact line numbers
+            clean_doc_text = re.sub(
+                r"<!--[\s\S]*?-->",
+                lambda m: "\n" * m.group(0).count("\n"),
+                raw_doc_text,
+            )
+            lines = clean_doc_text.splitlines()
         except OSError:
             continue
+
+        active_cwd: Path = doc_path.parent
+        package_context_active: bool = False
 
         for idx, line in enumerate(lines, start=1):
             stripped = line.strip()
             if not stripped:
                 continue
 
-            # 1. Check npm / pnpm / yarn / bun script references against package.json
-            if pkg_scripts is not None:
+            # Reset active_cwd on top-level/second-level Markdown headings
+            if stripped.startswith(("# ", "## ")):
+                active_cwd = doc_path.parent
+                package_context_active = bool(pkg_dir_hint_re.search(stripped))
+
+            if pkg_dir_hint_re.search(line):
+                package_context_active = True
+
+            # Track `cd <subdir>` changes within code blocks or command instructions
+            for m_cd in cd_cmd_re.finditer(line):
+                cd_arg = m_cd.group(1).strip().strip("`'\"")
+                if not cd_arg:
+                    continue
+                for base_cand in (active_cwd, root, doc_path.parent):
+                    cand_dir = (base_cand / cd_arg).resolve()
+                    if cand_dir.is_dir() and cand_dir.is_relative_to(root):
+                        active_cwd = cand_dir
+                        break
+
+            # 1. Check npm / pnpm / yarn / bun script references against active_cwd or root package.json
+            if pkg_scripts is not None or workspace_pkg_scripts:
                 script_matches: List[str] = []
                 for m_npm in NPM_SCRIPT_RE.finditer(line):
                     script_matches.append(m_npm.group("script"))
@@ -532,23 +650,36 @@ def audit_repository(
                     script_matches.append(m_yarn.group("script"))
                 for scr in script_matches:
                     total_references_checked += 1
-                    if scr not in pkg_scripts:
+                    cwd_pkg = active_cwd / "package.json"
+                    cwd_scripts = (_get_sigs(cwd_pkg).get("symbols") or {}) if cwd_pkg.is_file() else {}
+                    found_in_cwd = scr in cwd_scripts
+                    found_in_root = pkg_scripts is not None and scr in pkg_scripts
+                    found_in_ws = False
+                    if not found_in_cwd and not found_in_root and package_context_active and workspace_pkg_scripts:
+                        found_in_ws = any(scr in ws_s for ws_s in workspace_pkg_scripts.values())
+                    if not (found_in_cwd or found_in_root or found_in_ws):
+                        target_pkg_rel = (
+                            str(cwd_pkg.relative_to(root)).replace("\\", "/")
+                            if cwd_pkg.is_file() and cwd_pkg.is_relative_to(root)
+                            else "package.json"
+                        )
+                        avail_keys = sorted((cwd_scripts or pkg_scripts or {}).keys())[:8]
                         _add_finding(
                             rule_id="missing_script",
                             severity="error",
                             doc_rel=doc_rel,
                             line_no=idx,
-                            target_path="package.json",
+                            target_path=target_pkg_rel,
                             symbol=scr,
-                            message=f"`{doc_rel}:{idx}`에서 참조한 스크립트 `{scr}`가 `package.json`의 `scripts`에 존재하지 않아요.",
-                            remediation=f"`package.json`의 `scripts` 목록({sorted(pkg_scripts.keys())[:8]})에 맞춰 문서의 실행 명령을 수정하세요.",
+                            message=f"`{doc_rel}:{idx}`에서 참조한 스크립트 `{scr}`가 `{target_pkg_rel}`의 `scripts`에 존재하지 않아요.",
+                            remediation=f"`{target_pkg_rel}`의 `scripts` 목록({avail_keys})에 맞춰 문서의 실행 명령을 수정하세요.",
                         )
 
             # 2. Check `make <target>` references against Makefile
             if make_targets is not None:
                 for m_mk in MAKE_TARGET_RE.finditer(line):
                     tgt = m_mk.group("target") or m_mk.group("target2")
-                    if not tgt:
+                    if not tgt or tgt.lower() in MAKE_PROSE_STOPWORDS:
                         continue
                     total_references_checked += 1
                     if tgt not in make_targets:
@@ -592,6 +723,9 @@ def audit_repository(
                 clean_p = clean_p.lstrip("/")
                 if not clean_p or (exp_sym is None and clean_p.lower() in IGNORED_FILE_TOKENS):
                     continue
+                if clean_p.lower().endswith((".md", ".mdx", ".rst", ".txt", ".html", ".htm")):
+                    # Markdown section heading anchors (#section-name) are not code symbol anchors
+                    exp_sym = None
                 if clean_p.startswith((
                     "http://",
                     "https://",
@@ -603,12 +737,30 @@ def audit_repository(
                     "var/",
                     "tmp/",
                     "private/",
+                    "node_modules/",
+                    "dist/",
+                    "build/",
+                    ".cache/",
+                    ".auth/",
+                    "output/",
+                    "work/",
+                    "memories/",
+                    "wt/",
                 )):
+                    continue
+                if f"@{clean_p}" in line or re.match(r"^[A-Z][A-Z0-9_]{1,}/", clean_p):
+                    continue
+                first_seg = clean_p.split("/", 1)[0]
+                if "/" in clean_p and ("." in first_seg or first_seg in ("React", "Vue", "Angular", "Svelte")):
                     continue
                 lower_p = clean_p.lower()
                 if (
                     "path/to/" in lower_p
                     or "/path/" in lower_p
+                    or "my_provider/" in lower_p
+                    or "my_block" in lower_p
+                    or "2025-06-15-" in lower_p
+                    or lower_p in ("src/config/database.ts", "src/db/client.ts")
                     or lower_p.endswith(("/foo.py", "/test_foo.py", "/bar.py", "/example.py", "/example.ts"))
                     or lower_p in ("foo.py", "bar.py", "test_foo.py", "example.py", "example.ts")
                 ):
@@ -618,11 +770,30 @@ def audit_repository(
                 seen_line_paths.add((clean_p, exp_sym))
                 total_references_checked += 1
 
-                # Resolve relative to repo root or relative to the doc's parent directory
-                candidate = root / clean_p
-                if not candidate.exists() and (doc_path.parent / clean_p).exists():
+                # Resolve relative to active_cwd (from `cd <subdir>`), repo root, doc parent, .github/workflows, or monorepo subpaths
+                candidate = active_cwd / clean_p
+                if not candidate.is_file() and (root / clean_p).is_file():
+                    candidate = root / clean_p
+                if not candidate.is_file() and (doc_path.parent / clean_p).is_file():
                     candidate = doc_path.parent / clean_p
+                if not candidate.is_file() and "/" not in clean_p and clean_p.endswith((".yml", ".yaml")):
+                    wf_cand = root / ".github" / "workflows" / clean_p
+                    if wf_cand.is_file():
+                        candidate = wf_cand
+                if not candidate.is_file():
+                    if "/" in clean_p:
+                        suffix_match = "/" + clean_p.lstrip("/")
+                        for rel_s, p_full in all_rel_paths:
+                            if rel_s == clean_p or rel_s.endswith(suffix_match):
+                                candidate = p_full
+                                break
+                    elif clean_p in by_basename and exp_sym is None:
+                        candidate = by_basename[clean_p][0]
+
                 if not candidate.exists() or not candidate.is_file():
+                    # Ignore bare filenames without directory prefix when no symbol anchor is attached
+                    if exp_sym is None and "/" not in clean_p:
+                        continue
                     _add_finding(
                         rule_id="missing_path",
                         severity="error",
@@ -635,11 +806,32 @@ def audit_repository(
                     )
                     continue
 
-                rel_target = str(candidate.resolve().relative_to(root)) if candidate.resolve().is_relative_to(root) else clean_p
+                try:
+                    rel_target = (
+                        str(candidate.resolve().relative_to(root))
+                        if candidate.resolve().is_relative_to(root)
+                        else str(candidate.relative_to(root))
+                    )
+                except ValueError:
+                    rel_target = clean_p
                 sig_info = _get_sigs(candidate)
                 resolution = sig_info.get("__resolution__", "unsupported")
+                syntax_ok = sig_info.get("__syntax_ok__", True)
                 symbols_map = sig_info.get("symbols") or {}
                 resolved_line_files.append((rel_target, candidate, sig_info))
+
+                if resolution == "parse_error" or (not syntax_ok and resolution in ("exact", "contract")):
+                    _add_finding(
+                        rule_id="syntax_error",
+                        severity="error",
+                        doc_rel=doc_rel,
+                        line_no=idx,
+                        target_path=rel_target,
+                        symbol=exp_sym,
+                        message=f"`{doc_rel}:{idx}`에서 참조한 코드 파일 `{rel_target}`에 구문 오류(Syntax/Parse Error)가 있어요.",
+                        remediation=f"`{rel_target}`의 괄호/문자열/구문 오류를 먼저 수리하세요.",
+                    )
+                    continue
 
                 if exp_sym:
                     if resolution == "unsupported":
@@ -671,15 +863,14 @@ def audit_repository(
                 if resolution not in ("exact", "contract"):
                     continue
                 symbols_map = sig_info.get("symbols") or {}
+                target_stem = Path(rel_target).stem
+                is_example_script = rel_target.startswith("examples/") or "/examples/" in rel_target
                 for m_call in INLINE_CALL_RE.finditer(line):
                     call_name = m_call.group("name")
                     if call_name in PYTHON_BUILTINS_AND_COMMON:
                         continue
                     if call_name.startswith("__") and not call_name.endswith("__"):
                         continue
-                    # Ignore if call_name is actually part of a filename like `calc_mod.py`
-                    if f"{call_name}." in line and not f".{call_name}(" in line and call_name not in symbols_map:
-                        pass
                     pos_cnt, kw_list, is_def_like = _parse_call_arguments(m_call.group("args"))
                     if call_name in symbols_map:
                         drift_msg = _check_inline_call_vs_signature(
@@ -697,11 +888,10 @@ def audit_repository(
                                 remediation=f"`{rel_target}`의 최신 `{call_name}` 시그니처에 맞춰 인자 목록을 업데이트하세요.",
                             )
                     else:
-                        # Only flag `missing_symbol` for inline calls when the line has a single target code file
-                        # and the call is inside backticks or explicitly attached to the module
-                        if len(resolved_line_files) == 1 and (
-                            f"`{call_name}(" in line or f".{call_name}(" in line
-                        ):
+                        # Only flag `missing_symbol` for inline calls when explicitly qualified with target module stem
+                        # (explicit `path::symbol` and `path#symbol` anchors are already checked above).
+                        is_stem_qualified = f"{target_stem}.{call_name}(" in line
+                        if len(resolved_line_files) == 1 and is_stem_qualified:
                             _add_finding(
                                 rule_id="missing_symbol",
                                 severity="error",
@@ -839,6 +1029,7 @@ def audit_repository(
 
     report: Dict[str, Any] = {
         "ok": error_count == 0,
+        "exitCode": 0 if error_count == 0 else 1,
         "repoPath": str(root),
         "scannedDocsCount": len(docs),
         "scannedDocs": [str(p.relative_to(root)) for p in docs],
@@ -926,6 +1117,16 @@ def format_audit_sarif(report: Dict[str, Any]) -> Dict[str, Any]:
             "name": "UnsupportedLanguageAnchor",
             "shortDescription": {"text": "Symbol anchor attached to a file without structural AST contract support."},
         },
+        {
+            "id": "invalid_git_ref",
+            "name": "InvalidGitComparisonRef",
+            "shortDescription": {"text": "Specified Git base or head ref could not be resolved by git diff."},
+        },
+        {
+            "id": "syntax_error",
+            "name": "TargetFileSyntaxError",
+            "shortDescription": {"text": "Referenced source file contains a syntax or parse error."},
+        },
     ]
     results = []
     for f in report.get("findings") or []:
@@ -951,7 +1152,7 @@ def format_audit_sarif(report: Dict[str, Any]) -> Dict[str, Any]:
                 "tool": {
                     "driver": {
                         "name": "DeltaHarness",
-                        "informationUri": "https://github.com/deltaharness/deltaharness",
+                        "informationUri": "https://github.com/ian-nocturne/deltaharness",
                         "version": "8.2.0",
                         "rules": rules,
                     }
@@ -960,3 +1161,36 @@ def format_audit_sarif(report: Dict[str, Any]) -> Dict[str, Any]:
             }
         ],
     }
+
+
+audit_repo = audit_repository
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description="DeltaHarness Procedure & Instruction Auditor")
+    parser.add_argument("repo_positional", nargs="?", default=None, help="Target repository path")
+    parser.add_argument("--repo-path", default=None, help="Target repository path")
+    parser.add_argument("--base", default=None, help="Git base ref for blast-radius diff")
+    parser.add_argument("--head", default="HEAD", help="Git head ref for blast-radius diff")
+    parser.add_argument("--format", default="json", choices=["json", "markdown", "sarif"], help="Output format")
+    parser.add_argument("--exit-zero", action="store_true", help="Always return exit code 0 even when errors are found")
+    args = parser.parse_args(argv)
+
+    target = args.repo_path or args.repo_positional or "."
+    res = audit_repository(target, base_ref=args.base, head_ref=args.head, output_format=args.format)
+    if args.format in ("markdown", "sarif") and "formatted" in res:
+        print(res["formatted"])
+    else:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    if args.exit_zero:
+        return 0
+    return int(res.get("exitCode", 0 if res.get("ok", True) else 1))
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
+

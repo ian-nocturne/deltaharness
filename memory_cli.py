@@ -169,12 +169,12 @@ def main():
     bak_p=sub.add_parser('backup');bak_p.add_argument('--dest-dir',default=None);bak_p.add_argument('--include-models',action='store_true')
     res_p=sub.add_parser('restore');res_p.add_argument('--backup-dir',required=True)
     rb_p=sub.add_parser('repo-benchmark');rb_p.add_argument('--work-dir',default=None)
-    aud_p=sub.add_parser('audit');aud_p.add_argument('repo_positional',nargs='?',default=None);aud_p.add_argument('--repo-path',default=None)
-    aud_p.add_argument('--base',default=None);aud_p.add_argument('--head',default='HEAD');aud_p.add_argument('--format',default='json',choices=['json','markdown','sarif'])
-    resc_p=sub.add_parser('rescue');resc_p.add_argument('repo_positional',nargs='?',default=None);resc_p.add_argument('--repo-path',default=None)
-    resc_p.add_argument('--write',action='store_true');resc_p.add_argument('--output-dir',default=None);resc_p.add_argument('--format',default='json',choices=['json','markdown','prompt'])
-    slop_p=sub.add_parser('anti-slop');slop_p.add_argument('repo_positional',nargs='?',default=None);slop_p.add_argument('--repo-path',default=None)
-    slop_p.add_argument('--lock',action='store_true');slop_p.add_argument('--archetype',default='linear-precision');slop_p.add_argument('--format',default='json',choices=['json','markdown','prompt'])
+    aud_p=sub.add_parser('audit');aud_p.add_argument('repo_positional',nargs='?',default=None);aud_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    aud_p.add_argument('--base',default=None);aud_p.add_argument('--head',default='HEAD');aud_p.add_argument('--format',default='json',choices=['json','markdown','sarif']);aud_p.add_argument('--exit-zero',action='store_true')
+    resc_p=sub.add_parser('rescue',aliases=['viberescue']);resc_p.add_argument('repo_positional',nargs='?',default=None);resc_p.add_argument('extra_positional',nargs='?',default=None);resc_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    resc_p.add_argument('--write',action='store_true');resc_p.add_argument('--output-dir',default=None);resc_p.add_argument('--format',default='json',choices=['json','markdown','prompt']);resc_p.add_argument('--exit-zero',action='store_true')
+    slop_p=sub.add_parser('anti-slop');slop_p.add_argument('repo_positional',nargs='?',default=None);slop_p.add_argument('extra_positional',nargs='?',default=None);slop_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    slop_p.add_argument('--lock',action='store_true');slop_p.add_argument('--force',action='store_true');slop_p.add_argument('--archetype',default='linear-precision');slop_p.add_argument('--format',default='json',choices=['json','markdown','prompt']);slop_p.add_argument('--exit-zero',action='store_true')
     heal_p=sub.add_parser('heal-skills');heal_p.add_argument('--dry-run',action='store_true')
     ver_p=sub.add_parser('verify-skill');ver_p.add_argument('--id',required=True);ver_p.add_argument('--command',default=None)
     ver_p.add_argument('--proof-file',default=None);ver_p.add_argument('--operation-id',default='');ver_p.add_argument('--timeout',type=float,default=15.0)
@@ -208,17 +208,27 @@ def main():
     if args.action=='repo-benchmark':return memory.repo_benchmark(work_dir=args.work_dir)
     if args.action=='audit':
         target_repo=args.repo_path or args.repo_positional or '.'
-        return memory.audit_repo(target_repo,base_ref=args.base,head_ref=args.head,output_format=args.format)
-    if args.action=='rescue':
+        res=memory.audit_repo(target_repo,base_ref=args.base,head_ref=args.head,output_format=args.format)
+        if args.exit_zero and isinstance(res,dict):res['_cli_exit_zero']=True
+        return res
+    if args.action in ('rescue','viberescue'):
         from prism_memory.viberescue import build_rescue_bundle
-        target_repo=args.repo_path or args.repo_positional or '.'
-        return build_rescue_bundle(target_repo,write_files=args.write,output_dir=args.output_dir,output_format=args.format)
+        pos_repo=args.extra_positional if args.repo_positional in ('pack','scan') else args.repo_positional
+        target_repo=args.repo_path or pos_repo or '.'
+        res=build_rescue_bundle(target_repo,write_files=args.write,output_dir=args.output_dir,output_format=args.format)
+        if args.exit_zero and isinstance(res,dict):res['_cli_exit_zero']=True
+        return res
     if args.action=='anti-slop':
         from prism_memory.anti_slop import scan_anti_slop, lock_design_system
-        target_repo=args.repo_path or args.repo_positional or '.'
-        if args.lock:
-            return lock_design_system(target_repo,archetype=args.archetype,write_files=True)
-        return scan_anti_slop(target_repo,output_format=args.format)
+        is_lock=bool(args.lock or args.repo_positional=='lock')
+        pos_repo=args.extra_positional if args.repo_positional in ('scan','lock') else args.repo_positional
+        target_repo=args.repo_path or pos_repo or '.'
+        if is_lock:
+            res=lock_design_system(target_repo,archetype=args.archetype,write_files=True,force=args.force)
+        else:
+            res=scan_anti_slop(target_repo,output_format=args.format)
+        if args.exit_zero and isinstance(res,dict):res['_cli_exit_zero']=True
+        return res
     store=WorkStore(args.root)
     if args.action=='doctor':return memory.doctor(store)
     if args.action=='backup':return memory.backup(store,dest_dir=args.dest_dir,include_models=args.include_models)
@@ -332,7 +342,10 @@ def main():
 def cli():
     try:
         result = main()
+        exit_zero = result.pop('_cli_exit_zero', False) if isinstance(result, dict) else False
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
+        if not exit_zero and isinstance(result, dict) and 'exitCode' in result:
+            return int(result['exitCode'])
         return 0
     except Exception as exc:
         print(json.dumps({'ok': False, 'error': str(exc), 'type': type(exc).__name__}, ensure_ascii=False))
@@ -341,4 +354,5 @@ def cli():
 
 if __name__=='__main__':
     sys.exit(cli())
+
 

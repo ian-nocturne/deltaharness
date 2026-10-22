@@ -40,8 +40,11 @@ outputs:
     description: "Overall gate status ('PASS' or 'DRIFT_DETECTED')."
     value: ${{ steps.run-gate.outputs.status }}
   finding-count:
-    description: "Total number of drift/blocker findings."
+    description: "Number of blocking/error findings across active gates."
     value: ${{ steps.run-gate.outputs.finding_count }}
+  total-finding-count:
+    description: "Total number of all findings (including warnings and hygiene notices)."
+    value: ${{ steps.run-gate.outputs.total_finding_count }}
   slop-score:
     description: "AI Slop Score (0-100, lower is cleaner) when mode includes 'anti-slop'."
     value: ${{ steps.run-gate.outputs.slop_score }}
@@ -80,7 +83,12 @@ runs:
         from prism_memory.viberescue import build_rescue_bundle
         from prism_memory.anti_slop import scan_anti_slop
 
+        VALID_MODES = ("audit", "rescue", "anti-slop", "all")
         mode = os.environ.get("INPUT_MODE", "audit").strip().lower()
+        if mode not in VALID_MODES:
+            sys.stderr.write(f"Error: invalid DeltaHarness mode '{mode}'. Choose from {VALID_MODES}.\n")
+            sys.exit(2)
+
         repo_path = os.environ.get("INPUT_REPO_PATH", ".").strip() or "."
         base_ref = os.environ.get("INPUT_BASE_REF", "").strip() or None
         head_ref = os.environ.get("INPUT_HEAD_REF", "HEAD").strip() or "HEAD"
@@ -88,6 +96,7 @@ runs:
         sarif_file = os.environ.get("INPUT_SARIF_FILE", "deltaharness-audit.sarif").strip()
 
         summary_lines = []
+        blocking_findings = 0
         total_findings = 0
         slop_score = 0
         has_blocker = False
@@ -95,8 +104,10 @@ runs:
         if mode in ("audit", "all"):
             audit_res = audit_repository(repo_path, base_ref=base_ref, head_ref=head_ref, output_format="json")
             findings = audit_res.get("findings", [])
+            err_cnt = int(audit_res.get("errorCount", 0))
+            blocking_findings += err_cnt
             total_findings += len(findings)
-            if findings:
+            if not audit_res.get("ok", True) or err_cnt > 0:
                 has_blocker = True
             md_report = format_audit_markdown(audit_res)
             summary_lines.append(md_report)
@@ -107,16 +118,20 @@ runs:
         if mode in ("rescue", "all"):
             rescue_res = build_rescue_bundle(repo_path, write_files=False)
             blockers = rescue_res.get("blockers", [])
+            crit_high = sum(1 for b in blockers if b.get("severity") in ("critical", "high"))
+            blocking_findings += crit_high
             total_findings += len(blockers)
-            if any(b.get("severity") == "critical" for b in blockers):
+            if not rescue_res.get("ok", True) or crit_high > 0:
                 has_blocker = True
             summary_lines.append(rescue_res.get("rescueBriefMarkdown", ""))
 
         if mode in ("anti-slop", "all"):
             slop_res = scan_anti_slop(repo_path)
             slop_score = slop_res.get("slopScore", 0)
-            total_findings += len(slop_res.get("findings", []))
-            if slop_score >= 40:
+            slop_findings = slop_res.get("findings", [])
+            total_findings += len(slop_findings)
+            if not slop_res.get("ok", True) or slop_score >= 20:
+                blocking_findings += len(slop_findings) or 1
                 has_blocker = True
             summary_lines.append(slop_res.get("markdownReport", ""))
 
@@ -133,9 +148,11 @@ runs:
         if gh_out:
             with open(gh_out, "a", encoding="utf-8") as fp:
                 fp.write(f"status={status}\n")
-                fp.write(f"finding_count={total_findings}\n")
+                fp.write(f"finding_count={blocking_findings}\n")
+                fp.write(f"total_finding_count={total_findings}\n")
                 fp.write(f"slop_score={slop_score}\n")
 
         if fail_on_drift and has_blocker:
             sys.exit(1)
         PYEOF
+

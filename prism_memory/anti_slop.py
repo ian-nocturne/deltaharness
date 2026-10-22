@@ -1,20 +1,16 @@
-"""Anti-Slop Ship Gate (`anti-slop`) — UI & Korean Copy Anti-Slop Scanner and Reference-First Design Lock.
-
-Addresses the validated Vibe Coder & Maker pain point (`P6` in Report 1):
-- Instant user distrust caused by unmistakable "AI Slop" aesthetics (purple/indigo radial gradients,
-  emoji-stuffed UI chrome, fractional pixel font sizes, 3+ nested bordered cards, blocked viewport zoom,
-  missing design token discipline, and robotic Korean translation-ese copy).
+"""Anti-Slop Ship Gate (`anti-slop`) — Static UI & Korean Copy Rule Scanner and Reference-First Design Lock.
 
 Capabilities:
 1. `scan_anti_slop(target_path)`:
-   - Computes a deterministic `slopScore` (0–100, where 0 is cleanest reference-grade UI and 100 is heavy AI slop)
-     and a `grade` (`A+`, `A`, `B`, `C`, `D`, `F`).
-   - Detects 7 concrete categories of AI Slop with `file:line` citations.
-   - Generates a copy-pasteable `ANTI_SLOP_PATCH_PROMPT.md` to fix every violation.
-2. `lock_design_system(target_path, archetype="linear-precision")`:
-   - Generates `DESIGN.md` (with Reference Study & Anti-References) and `design-tokens.css` (4-step font scale,
-     3-step surface hierarchy, `.status-dot-sm` contract, and tabular numerals) so coding agents stay locked
-     to a category-defining design system.
+   - Scans `.html`, `.htm`, `.css`, `.tsx`, `.jsx`, `.js`, `.mjs`, `.vue`, `.svelte`, `.md`, `.mdx` after stripping comments.
+   - Resolves CSS custom properties (`var(--token)`) across `:root`, `[data-theme="light"]`, and `[data-theme="dark"]`.
+   - Computes WCAG 2.1 contrast ratios on CSS background/text color pairs (`low_contrast_text`).
+   - Detects purple/indigo radial blobs (direct or via CSS variables), fractional pixel font sizes,
+     attribute-order-independent viewport zoom blocks, UI chrome emojis, 3+ nested bordered cards,
+     and Korean AI translation-ese copy patterns.
+2. `lock_design_system(target_path, archetype="linear-precision", force=False)`:
+   - Generates `DESIGN.md` and `design-tokens.css` (with explicit `--accent-text` contrast pairs).
+   - Refuses to overwrite existing `DESIGN.md` / `design-tokens.css` unless `--force` is passed (which creates `.bak` backups).
 """
 
 from __future__ import annotations
@@ -25,14 +21,15 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .audit import EXCLUDED_DIRS
 
-UI_EXTENSIONS = {".html", ".htm", ".css", ".tsx", ".jsx", ".vue", ".svelte"}
-COPY_EXTENSIONS = {".md", ".mdx", ".html", ".htm", ".tsx", ".jsx", ".vue", ".svelte"}
+UI_EXTENSIONS = {".html", ".htm", ".css", ".tsx", ".jsx", ".js", ".mjs", ".vue", ".svelte"}
+COPY_EXTENSIONS = {".md", ".mdx", ".html", ".htm", ".tsx", ".jsx", ".js", ".mjs", ".vue", ".svelte"}
 
 # 1. Purple / Indigo / Radial Blob AI Gradient Slop
 PURPLE_SLOP_RE = re.compile(
@@ -40,25 +37,27 @@ PURPLE_SLOP_RE = re.compile(
     r"via-(?:purple|indigo|violet|fuchsia)-[456789]00|"
     r"to-(?:purple|indigo|violet|fuchsia|pink)-[456789]00|"
     r"--ambient-mesh\s*:\s*radial-gradient|"
-    r"radial-gradient\s*\([^)]*(?:#8b5cf6|#6366f1|#a855f7|rgba\(\s*139\s*,\s*92\s*,\s*246))",
+    r"(?:radial-gradient|linear-gradient)\s*\([^;{}]*(?:#8b5cf6|#6366f1|#a855f7|#7c3aed|#9333ea|rgba?\(\s*(?:139\s*,\s*92\s*,\s*246|99\s*,\s*102\s*,\s*241|168\s*,\s*85\s*,\s*247)))",
     re.IGNORECASE,
 )
 
 # 2. Fractional Pixel Font Size Slop (10.1px .. 14.9px in CSS, JSX fontSize, or Tailwind text-[...])
 FRACTIONAL_FONT_RE = re.compile(
-    r"(?:(?:font-size|fontSize)\s*:\s*['\"]?(?:10\.[1-9]|11\.[1-9]|12\.[1-9]|13\.[1-9]|14\.[1-9])px\b|"
-    r"text-\[(?:10\.[1-9]|11\.[1-9]|12\.[1-9]|13\.[1-9]|14\.[1-9])px\])"
+    r"(?:(?:font-size|fontSize)\s*:\s*['\"]?(?:10\.[1-9]|11\.[1-9]|12\.[1-9]|13\.[1-9]|14\.[1-9])\d*px\b|"
+    r"text-\[(?:10\.[1-9]|11\.[1-9]|12\.[1-9]|13\.[1-9]|14\.[1-9])\d*px\])"
 )
 
-# 3. Viewport Zoom Block Slop
-VIEWPORT_ZOOM_BLOCK_RE = re.compile(
-    r"<meta[^>]+name=[\"']viewport[\"'][^>]+(?:user-scalable\s*=\s*no|maximum-scale\s*=\s*1(?:\.0)?\b)",
+# 3. Viewport Zoom Block Slop (attribute-order independent on <meta ...>)
+META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
+VIEWPORT_NAME_RE = re.compile(r"\bname\s*=\s*[\"']viewport[\"']", re.IGNORECASE)
+VIEWPORT_BLOCK_CONTENT_RE = re.compile(
+    r"(?:user-scalable\s*=\s*['\"]?no\b|maximum-scale\s*=\s*1(?:\.0)?\b)",
     re.IGNORECASE,
 )
 
 # 4. Emoji Chrome Slop inside UI controls/headings
 EMOJI_CHROME_RE = re.compile(
-    r"(?:<(?:button|a|h1|h2|h3|h4|span|nav|header|label)[^>]*>[^<\n]{0,40}?"
+    r"(?:<(?:button|a|h1|h2|h3|h4|span|nav|header|label)\b[^>]*>[^<\n]{0,60}?"
     r"(?:🚀|✨|⚡|🔥|💡|📋|🟢|🟡|⚙️|💭|✴️|🎉|💎|🤖|🌟))|"
     r"(?:✴️\s*작업\s*진행\s*중|💭\s*사고\s*과정\s*보기|⚡️\s*실행한\s*도구|📋\s*사양\s*계약|🟢\s*확정\s*사양|🟡\s*미정\s*사항)"
 )
@@ -127,6 +126,7 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--text-secondary": "#3F3F46",
             "--text-muted": "#71717A",
             "--accent-primary": "#18181B",
+            "--accent-text": "#FAFAFA",
         },
         "dark": {
             "--surface-canvas": "#09090B",
@@ -139,6 +139,7 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--text-secondary": "#A1A1AA",
             "--text-muted": "#71717A",
             "--accent-primary": "#FAFAFA",
+            "--accent-text": "#09090B",
         },
     },
     "stripe-editorial": {
@@ -176,6 +177,7 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--text-secondary": "#374151",
             "--text-muted": "#6B7280",
             "--accent-primary": "#0F172A",
+            "--accent-text": "#FFFFFF",
         },
         "dark": {
             "--surface-canvas": "#0B0F17",
@@ -188,6 +190,7 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--text-secondary": "#CBD5E1",
             "--text-muted": "#64748B",
             "--accent-primary": "#38BDF8",
+            "--accent-text": "#090D16",
         },
     },
     "toss-clarity": {
@@ -226,6 +229,7 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--text-secondary": "#4E5968",
             "--text-muted": "#8B95A1",
             "--accent-primary": "#3182F6",
+            "--accent-text": "#FFFFFF",
         },
         "dark": {
             "--surface-canvas": "#101214",
@@ -238,16 +242,192 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--text-secondary": "#B0B8C1",
             "--text-muted": "#6B7684",
             "--accent-primary": "#3182F6",
+            "--accent-text": "#FFFFFF",
+        },
+    },
+    "apple-minimal": {
+        "name": "Apple Human Interface / Neutral Glass & SF Hierarchy",
+        "benchmarks": [
+            {
+                "product": "Apple Developer Documentation & macOS System Settings",
+                "whyItWorks": "Neutral stone/graphite surfaces, clear typographic weight contrast, and zero neon noise.",
+                "keyBorrowing": "Use `#F5F5F7` canvas, `#FFFFFF` grouped cards, and `#0071E3` semantic action links.",
+            },
+            {
+                "product": " Keynote / Apple Newsroom",
+                "whyItWorks": "Strict 4-step font hierarchy with generous line-height and tabular numbers.",
+                "keyBorrowing": "Lock font scale to 12px/14px/16px/28px and avoid nested bordered boxes.",
+            },
+            {
+                "product": "Korean ASD-STE100 + Toss Writing",
+                "whyItWorks": "Concise active Korean sentences with zero machine translation artifacts.",
+                "keyBorrowing": "Write direct user-facing labels without emoji clutter.",
+            },
+        ],
+        "antiReferences": [
+            "Purple/indigo radial-gradient background blobs",
+            "Emoji icons inside navigation bars or CTA buttons",
+            "Fractional pixel font sizes (`11.5px`, `13.5px`)",
+            "3+ nested bordered cards",
+        ],
+        "light": {
+            "--surface-canvas": "#F5F5F7",
+            "--surface-card": "#FFFFFF",
+            "--surface-subtle": "#E8E8ED",
+            "--surface-sheet": "rgba(255, 255, 255, 0.88)",
+            "--token-border-subtle": "#D2D2D7",
+            "--token-border-strong": "#86868B",
+            "--text-primary": "#1D1D1F",
+            "--text-secondary": "#515154",
+            "--text-muted": "#86868B",
+            "--accent-primary": "#0071E3",
+            "--accent-text": "#FFFFFF",
+        },
+        "dark": {
+            "--surface-canvas": "#000000",
+            "--surface-card": "#1C1C1E",
+            "--surface-subtle": "#2C2C2E",
+            "--surface-sheet": "rgba(28, 28, 30, 0.88)",
+            "--token-border-subtle": "#38383A",
+            "--token-border-strong": "#48484A",
+            "--text-primary": "#F5F5F7",
+            "--text-secondary": "#A1A1A6",
+            "--text-muted": "#6E6E73",
+            "--accent-primary": "#2997FF",
+            "--accent-text": "#000000",
         },
     },
 }
 
 
+def _strip_ui_comments_preserve_lines(text: str, ext: str) -> str:
+    """Strip HTML, CSS, or JS/TS comments while preserving exact line numbers."""
+    # Always strip HTML comments for HTML/MD/Vue/Svelte/JSX/TSX
+    out = re.sub(r"<!--[\s\S]*?-->", lambda m: "\n" * m.group(0).count("\n"), text)
+    if ext in (".css", ".html", ".htm"):
+        out = re.sub(r"/\*[\s\S]*?\*/", lambda m: "\n" * m.group(0).count("\n"), out)
+        return out
+    if ext in (".js", ".mjs", ".jsx", ".ts", ".tsx", ".vue", ".svelte"):
+        from .code_anchors import _blank_js_comments_preserve_lines
+        blanked, _ = _blank_js_comments_preserve_lines(out)
+        return blanked
+    return out
+
+
+def _parse_hex_rgb(color_str: str) -> Optional[Tuple[int, int, int]]:
+    """Parse #RGB or #RRGGBB into (r, g, b) 0..255."""
+    s = (color_str or "").strip()
+    m = re.match(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b", s)
+    if not m:
+        return None
+    hx = m.group(1)
+    if len(hx) == 3:
+        return (int(hx[0] * 2, 16), int(hx[1] * 2, 16), int(hx[2] * 2, 16))
+    return (int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16))
+
+
+def _wcag_contrast_ratio(rgb1: Tuple[int, int, int], rgb2: Tuple[int, int, int]) -> float:
+    def _rel_lum(rgb: Tuple[int, int, int]) -> float:
+        vals = []
+        for c in rgb:
+            v = c / 255.0
+            vals.append(v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4)
+        return 0.2126 * vals[0] + 0.7152 * vals[1] + 0.0722 * vals[2]
+
+    l1 = _rel_lum(rgb1)
+    l2 = _rel_lum(rgb2)
+    bright, dark = (l1, l2) if l1 >= l2 else (l2, l1)
+    return round((bright + 0.05) / (dark + 0.05), 2)
+
+
+def _extract_css_Regions(text: str, ext: str) -> List[Tuple[int, str]]:
+    """Return (start_char_offset, css_text) regions: full text for .css, <style> blocks for .html."""
+    if ext == ".css":
+        return [(0, text)]
+    regions: List[Tuple[int, str]] = []
+    for m in re.finditer(r"<style\b[^>]*>([\s\S]*?)</style>", text, re.IGNORECASE):
+        regions.append((m.start(1), m.group(1)))
+    return regions
+
+
+def _collect_css_variables(clean_css_texts: List[str]) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Extract custom properties `--name: value` for light/root and dark scopes in O(N) time."""
+    light_vars: Dict[str, str] = {}
+    dark_vars: Dict[str, str] = {}
+    block_re = re.compile(r"([^{}@;<>]{1,160})\{([^{}]{0,4000})\}")
+    var_decl_re = re.compile(r"(--[A-Za-z0-9_-]+)\s*:\s*([^;\n]+);?")
+    for txt in clean_css_texts:
+        for bm in block_re.finditer(txt):
+            selector = bm.group(1).strip().lower()
+            body = bm.group(2)
+            is_dark = "dark" in selector
+            target_map = dark_vars if is_dark else light_vars
+            for vm in var_decl_re.finditer(body):
+                target_map[vm.group(1).strip()] = vm.group(2).strip()
+    # Inherit unset dark vars from light/root vars
+    merged_dark = dict(light_vars)
+    merged_dark.update(dark_vars)
+    return light_vars, merged_dark
+
+
+def _resolve_css_vars(expr: str, var_map: Dict[str, str]) -> str:
+    """Resolve `var(--token)` references up to 3 hops using `var_map`."""
+    resolved = expr
+    var_ref_re = re.compile(r"var\(\s*(--[A-Za-z0-9_-]+)(?:\s*,\s*([^)]+))?\)")
+    for _ in range(3):
+        if "var(" not in resolved:
+            break
+        resolved = var_ref_re.sub(
+            lambda m: var_map.get(m.group(1), (m.group(2) or "").strip() or m.group(0)),
+            resolved,
+        )
+    return resolved
+
+
+def _detect_nested_bordered_cards(clean_text: str) -> List[Tuple[int, str]]:
+    """Detect 3+ nested HTML/JSX elements that each carry card or explicit border styling."""
+    tag_re = re.compile(
+        r"<(/?)(div|section|article|aside|main)\b([^>]*?)(/?)>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    card_attr_re = re.compile(
+        r"(?:(?<![a-zA-Z0-9_-])(?:[a-zA-Z0-9_]+-)?card(?![-a-zA-Z0-9_])|(?<![a-zA-Z0-9_-])border(?![-a-zA-Z0-9_])|border\s*:\s*[1-9]px)",
+        re.IGNORECASE,
+    )
+    stack: List[Tuple[str, bool, int]] = []
+    hits: List[Tuple[int, str]] = []
+    reported_lines: set[int] = set()
+
+    for m in tag_re.finditer(clean_text):
+        is_close = bool(m.group(1))
+        tag_name = m.group(2).lower()
+        attrs = m.group(3) or ""
+        is_self_close = bool(m.group(4))
+        line_no = clean_text[:m.start()].count("\n") + 1
+
+        if is_close:
+            for idx in range(len(stack) - 1, -1, -1):
+                if stack[idx][0] == tag_name:
+                    stack.pop(idx)
+                    break
+            continue
+
+        is_card = bool(card_attr_re.search(attrs))
+        if not is_self_close:
+            stack.append((tag_name, is_card, line_no))
+            card_depth = sum(1 for _, c_flag, _ in stack if c_flag)
+            if is_card and card_depth >= 3 and line_no not in reported_lines:
+                reported_lines.add(line_no)
+                hits.append((line_no, m.group(0).splitlines()[0][:80]))
+    return hits
+
+
 def scan_anti_slop(
     target_path: str | Path,
     output_format: str = "json",
+    max_findings: int = 100,
 ) -> Dict[str, Any]:
-    """Scan a directory or file for UI and copy AI Slop and return a 0-100 Slop Score."""
+    """Scan a directory or file for static UI and copy AI Slop rules."""
     started = time.perf_counter()
     target = Path(target_path).expanduser().resolve()
     if not target.exists():
@@ -257,7 +437,6 @@ def scan_anti_slop(
     findings: List[Dict[str, Any]] = []
     passed_checks: List[str] = []
 
-    # Check DESIGN.md and design-tokens.css lock when scanning a directory with UI files
     files_to_scan: List[Path] = []
     if target.is_file():
         files_to_scan.append(target)
@@ -266,7 +445,7 @@ def scan_anti_slop(
             dirnames[:] = [
                 d for d in dirnames
                 if d not in EXCLUDED_DIRS
-                and d not in {"tests", "docs", "artifacts", "backups", "logs", "deployment", "products", "dogfood-sandbox", "archive"}
+                and d not in {"tests", "docs", "artifacts", "backups", "logs", "deployment", "dogfood-sandbox", "archive", "before_rescue", "after_rescue"}
             ]
             for fname in sorted(filenames):
                 fpath = Path(dirpath) / fname
@@ -281,6 +460,8 @@ def scan_anti_slop(
                     "RESCUE_BRIEF.md",
                     "ONE_PROMPT_RESCUE.md",
                     "ANTI_SLOP_PATCH_PROMPT.md",
+                    "KOREAN_HUMANIZE_RULES.md",
+                    "CLAUDE_AND_CURSOR_DROPIN.md",
                     "CLAUDE.md",
                     "AGENTS.md",
                     "HANDOFF.md",
@@ -291,6 +472,33 @@ def scan_anti_slop(
                     continue
                 if fpath.suffix.lower() in (UI_EXTENSIONS | COPY_EXTENSIONS):
                     files_to_scan.append(fpath)
+
+    elapsed_empty = round((time.perf_counter() - started) * 1000.0, 2)
+    if not files_to_scan:
+        empty_res: Dict[str, Any] = {
+            "ok": False,
+            "exitCode": 2,
+            "targetPath": str(target),
+            "scannedFiles": 0,
+            "elapsedMs": elapsed_empty,
+            "slopScore": None,
+            "cleanlinessScore": None,
+            "grade": "UNVERIFIED",
+            "verdict": "NO_UI_OR_COPY_FILES_FOUND",
+            "findingCount": 0,
+            "totalFindingCount": 0,
+            "returnedFindingCount": 0,
+            "byCategory": {},
+            "passedChecks": [],
+            "findings": [],
+        }
+        empty_res["markdownReport"] = format_anti_slop_markdown(empty_res)
+        empty_res["patchPromptMarkdown"] = format_anti_slop_patch_prompt(empty_res)
+        if output_format == "markdown":
+            empty_res["formatted"] = empty_res["markdownReport"]
+        elif output_format == "prompt":
+            empty_res["formatted"] = empty_res["patchPromptMarkdown"]
+        return empty_res
 
     has_ui_files = any(f.suffix.lower() in UI_EXTENSIONS for f in files_to_scan)
     tokens_file = root_dir / "design-tokens.css"
@@ -309,9 +517,30 @@ def scan_anti_slop(
                 "fixHint": "Run `anti-slop lock . --archetype linear-precision` to generate `DESIGN.md` and `design-tokens.css` before styling components.",
             })
         else:
-            t_txt = tokens_file.read_text(encoding="utf-8", errors="ignore")
-            missing_t = [t for t in REQUIRED_TOKENS if t not in t_txt]
-            if missing_t:
+            raw_d_txt = design_md_file.read_text(encoding="utf-8", errors="ignore")
+            clean_d_txt = _strip_ui_comments_preserve_lines(raw_d_txt, ".md").strip()
+            raw_t_txt = tokens_file.read_text(encoding="utf-8", errors="ignore")
+            clean_t_txt = _strip_ui_comments_preserve_lines(raw_t_txt, ".css")
+            missing_t = []
+            for tok in REQUIRED_TOKENS:
+                if tok.startswith("--"):
+                    if not re.search(rf"{re.escape(tok)}\s*:\s*[^;\s]+", clean_t_txt):
+                        missing_t.append(tok)
+                else:
+                    if not re.search(rf"{re.escape(tok)}\s*\{{", clean_t_txt):
+                        missing_t.append(tok)
+            if len(clean_d_txt) < 80:
+                findings.append({
+                    "category": "missing_design_lock",
+                    "severity": "warning",
+                    "weight": 12,
+                    "file": "DESIGN.md",
+                    "line": 1,
+                    "snippet": "Empty or stub DESIGN.md",
+                    "message": "`DESIGN.md` is empty or lacks substantive Reference-First design rules.",
+                    "fixHint": "Run `anti-slop lock . --force` to populate `DESIGN.md`.",
+                })
+            elif missing_t:
                 findings.append({
                     "category": "missing_design_lock",
                     "severity": "warning",
@@ -319,23 +548,108 @@ def scan_anti_slop(
                     "file": "design-tokens.css",
                     "line": 1,
                     "snippet": ", ".join(missing_t),
-                    "message": f"`design-tokens.css` is missing required scale/surface tokens: `{', '.join(missing_t)}`.",
-                    "fixHint": "Re-lock `design-tokens.css` with 4-step typography and 3-step surface variables.",
+                    "message": f"`design-tokens.css` is missing active declarations for required tokens: `{', '.join(missing_t)}`.",
+                    "fixHint": "Ensure `design-tokens.css` defines active CSS rules (not just comments) for all required tokens.",
                 })
             else:
                 passed_checks.append("DESIGN_LOCK: `DESIGN.md` and `design-tokens.css` 4-step font & 3-step surface contract verified.")
 
+    # Pre-collect CSS custom properties from design-tokens.css and all scanned CSS/HTML files
+    cleaned_file_cache: Dict[Path, str] = {}
+    css_sources: List[str] = []
+    if tokens_file.is_file():
+        css_sources.append(_strip_ui_comments_preserve_lines(tokens_file.read_text(encoding="utf-8", errors="ignore"), ".css"))
     for fpath in files_to_scan:
         try:
-            content = fpath.read_text(encoding="utf-8", errors="ignore")
+            raw_c = fpath.read_text(encoding="utf-8", errors="ignore")
         except OSError:
+            continue
+        ext = fpath.suffix.lower()
+        clean_c = _strip_ui_comments_preserve_lines(raw_c, ext)
+        cleaned_file_cache[fpath] = clean_c
+        if ext in (".css", ".html", ".htm"):
+            for _, region_txt in _extract_css_Regions(clean_c, ext):
+                css_sources.append(region_txt)
+
+    light_vars, dark_vars = _collect_css_variables(css_sources)
+
+    for fpath in files_to_scan:
+        clean_content = cleaned_file_cache.get(fpath)
+        if clean_content is None:
             continue
         rel = str(fpath.relative_to(root_dir)).replace("\\", "/") if fpath.is_relative_to(root_dir) else fpath.name
         ext = fpath.suffix.lower()
 
-        for lineno, line in enumerate(content.splitlines(), start=1):
+        if ext in UI_EXTENSIONS:
+            # Check attribute-order-independent viewport zoom block across <meta ...> tags
+            for m_meta in META_TAG_RE.finditer(clean_content):
+                tag_str = m_meta.group(0)
+                if VIEWPORT_NAME_RE.search(tag_str) and VIEWPORT_BLOCK_CONTENT_RE.search(tag_str):
+                    line_no = clean_content[:m_meta.start()].count("\n") + 1
+                    findings.append({
+                        "category": "viewport_zoom_block",
+                        "severity": "critical",
+                        "weight": 15,
+                        "file": rel,
+                        "line": line_no,
+                        "snippet": " ".join(tag_str.split())[:80],
+                        "message": "Viewport meta tag blocks pinch-to-zoom (`user-scalable=no` or `maximum-scale=1.0`).",
+                        "fixHint": "Remove `user-scalable=no` and `maximum-scale=1.0`; use 16px (`--font-title`) on inputs to prevent iOS auto-zoom.",
+                    })
+
+            # Check 3+ nested bordered cards in HTML/JSX/TSX/Vue/Svelte
+            if ext in {".html", ".htm", ".tsx", ".jsx", ".js", ".mjs", ".vue", ".svelte"}:
+                for nest_line, nest_snip in _detect_nested_bordered_cards(clean_content):
+                    findings.append({
+                        "category": "nested_card_box_slop",
+                        "severity": "warning",
+                        "weight": 8,
+                        "file": rel,
+                        "line": nest_line,
+                        "snippet": nest_snip,
+                        "message": "3+ nested bordered card containers detected.",
+                        "fixHint": "Flatten container hierarchy to at most 2 bordered levels using whitespace or 1px hairline dividers.",
+                    })
+
+            # Check CSS rule blocks for low contrast background/text pairs (e.g., white text on white button in dark mode)
+            if ext in {".css", ".html", ".htm"}:
+                rule_block_re = re.compile(r"([^{}@;\n<>]{1,160})\{([^{}]{0,2000})\}")
+                bg_prop_re = re.compile(r"(?:^|;|\s)background(?:-color)?\s*:\s*([^;]+)", re.IGNORECASE)
+                fg_prop_re = re.compile(r"(?:^|;|\s)color\s*:\s*([^;]+)", re.IGNORECASE)
+                for reg_offset, reg_txt in _extract_css_Regions(clean_content, ext):
+                    for rb in rule_block_re.finditer(reg_txt):
+                        sel = " ".join(rb.group(1).split())
+                        body = rb.group(2)
+                        m_bg = bg_prop_re.search(body)
+                        m_fg = fg_prop_re.search(body)
+                        if m_bg and m_fg:
+                            raw_bg = m_bg.group(1).strip()
+                            raw_fg = m_fg.group(1).strip()
+                            for mode_name, vmap in (("light", light_vars), ("dark", dark_vars)):
+                                res_bg = _resolve_css_vars(raw_bg, vmap)
+                                res_fg = _resolve_css_vars(raw_fg, vmap)
+                                rgb_bg = _parse_hex_rgb(res_bg)
+                                rgb_fg = _parse_hex_rgb(res_fg)
+                                if rgb_bg and rgb_fg:
+                                    ratio = _wcag_contrast_ratio(rgb_bg, rgb_fg)
+                                    if ratio < 3.0:
+                                        line_no = clean_content[: reg_offset + rb.start()].count("\n") + 1
+                                        findings.append({
+                                            "category": "low_contrast_text",
+                                            "severity": "critical",
+                                            "weight": 18,
+                                            "file": rel,
+                                            "line": line_no,
+                                            "snippet": f"{sel} ({mode_name}: bg {res_bg} vs text {res_fg} = {ratio}:1)",
+                                            "message": f"Unreadable contrast ratio `{ratio}:1` (< 3.0:1) in `{sel}` under `{mode_name}` theme (`{res_bg}` vs `{res_fg}`).",
+                                            "fixHint": "Use paired semantic contrast tokens (e.g. `background: var(--accent-primary); color: var(--accent-text);`).",
+                                        })
+                                        break
+
+        for lineno, line in enumerate(clean_content.splitlines(), start=1):
             if ext in UI_EXTENSIONS:
-                m_purple = PURPLE_SLOP_RE.search(line)
+                expanded_line = _resolve_css_vars(line, dark_vars) if "var(" in line else line
+                m_purple = PURPLE_SLOP_RE.search(line) or PURPLE_SLOP_RE.search(expanded_line)
                 if m_purple:
                     findings.append({
                         "category": "purple_radial_blob_slop",
@@ -343,7 +657,7 @@ def scan_anti_slop(
                         "weight": 12,
                         "file": rel,
                         "line": lineno,
-                        "snippet": m_purple.group(0)[:80],
+                        "snippet": line.strip()[:80],
                         "message": f"Purple/indigo AI gradient or radial blob detected (`{m_purple.group(0)[:50]}`).",
                         "fixHint": "Replace with neutral architectural surface tokens (`var(--surface-canvas)`, `var(--surface-card)`) and 1px subtle borders.",
                     })
@@ -359,18 +673,6 @@ def scan_anti_slop(
                         "snippet": m_frac.group(0),
                         "message": f"Fractional pixel font-size rule (`{m_frac.group(0)}`) breaks typographic hierarchy.",
                         "fixHint": "Use the 4-step scale (`var(--font-caption)` 12px, `var(--font-body)` 14px, `var(--font-title)` 16px, `var(--font-display)`).",
-                    })
-
-                if VIEWPORT_ZOOM_BLOCK_RE.search(line):
-                    findings.append({
-                        "category": "viewport_zoom_block",
-                        "severity": "critical",
-                        "weight": 15,
-                        "file": rel,
-                        "line": lineno,
-                        "snippet": line.strip()[:80],
-                        "message": "Viewport meta tag blocks pinch-to-zoom (`user-scalable=no` or `maximum-scale=1.0`).",
-                        "fixHint": "Remove `user-scalable=no` and `maximum-scale=1.0`; use 16px (`--font-title`) on inputs to prevent iOS auto-zoom.",
                     })
 
                 m_emoji = EMOJI_CHROME_RE.search(line)
@@ -414,12 +716,11 @@ def scan_anti_slop(
                             "fixHint": "Rewrite using Korean ASD-STE100 + Toss clarity style (1 sentence 1 judgment, concrete active verb, zero cliché).",
                         })
 
-    # Compute deterministic 0-100 Slop Score (capped at 100)
     raw_points = sum(f.get("weight", 5) for f in findings)
     slop_score = min(100, raw_points)
     if slop_score == 0:
         grade = "A+"
-        verdict = "ZERO_SLOP_REFERENCE_GRADE"
+        verdict = "STATIC_STYLE_RULES_PASSED"
     elif slop_score <= 12:
         grade = "A"
         verdict = "CLEAN_MINOR_POLISH"
@@ -441,9 +742,12 @@ def scan_anti_slop(
         cat = f.get("category", "other")
         by_category[cat] = by_category.get(cat, 0) + 1
 
+    returned_findings = findings if max_findings <= 0 else findings[:max_findings]
     elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+    exit_code = 0 if len(findings) == 0 else 1
     result: Dict[str, Any] = {
-        "ok": True,
+        "ok": len(findings) == 0,
+        "exitCode": exit_code,
         "targetPath": str(target),
         "scannedFiles": len(files_to_scan),
         "elapsedMs": elapsed_ms,
@@ -452,9 +756,12 @@ def scan_anti_slop(
         "grade": grade,
         "verdict": verdict,
         "findingCount": len(findings),
+        "totalFindingCount": len(findings),
+        "returnedFindingCount": len(returned_findings),
+        "truncated": len(findings) > len(returned_findings),
         "byCategory": by_category,
         "passedChecks": passed_checks,
-        "findings": findings[:50],
+        "findings": returned_findings,
     }
     result["markdownReport"] = format_anti_slop_markdown(result)
     result["patchPromptMarkdown"] = format_anti_slop_patch_prompt(result)
@@ -466,18 +773,28 @@ def scan_anti_slop(
 
 
 def format_anti_slop_markdown(result: Dict[str, Any]) -> str:
-    """Render a shareable Anti-Slop Receipt Card & violation table in Markdown."""
+    """Render a shareable Anti-Slop Static Rule Receipt & violation table in Markdown."""
+    if result.get("grade") == "UNVERIFIED":
+        return (
+            f"# 🎨 Anti-Slop Static Rule Receipt (`{Path(result.get('targetPath', '.')).name}`)\n\n"
+            "- **Status**: `UNVERIFIED` (`NO_UI_OR_COPY_FILES_FOUND`)\n"
+            "- **Scanned Files**: `0`\n\n"
+            "⚠️ No UI (`.html`, `.css`, `.tsx`, `.jsx`, `.js`) or copy (`.md`) files were found in the target path.\n"
+        )
+
     score = result.get("slopScore", 0)
     clean_score = result.get("cleanlinessScore", 100)
     grade = result.get("grade", "A+")
     verdict = result.get("verdict", "")
     findings = result.get("findings", [])
+    total_cnt = result.get("totalFindingCount", len(findings))
 
     lines = [
-        f"# 🎨 Anti-Slop Ship Gate Receipt (`{Path(result.get('targetPath', '.')).name}`)",
+        f"# 🎨 Anti-Slop Static Rule Receipt (`{Path(result.get('targetPath', '.')).name}`)",
         "",
-        f"- **Design Cleanliness Score**: **{clean_score} / 100** (Slop Index: `{score}/100`) · **Grade**: **`{grade}`** (`{verdict}`)",
-        f"- **Scanned Files**: `{result.get('scannedFiles', 0)}` · **Elapsed**: `{result.get('elapsedMs', 0)} ms`",
+        f"- **Static Rule Score**: **{clean_score} / 100** (Slop Penalty Index: `{score}/100`) · **Rule Grade**: **`{grade}`** (`{verdict}`)",
+        f"- **Scanned Files**: `{result.get('scannedFiles', 0)}` · **Total Findings**: `{total_cnt}` · **Elapsed**: `{result.get('elapsedMs', 0)} ms`",
+        "- *Scope Note: Measures compliance with static anti-slop style/contrast/copy rules; does not replace human UX or visual layout testing.*",
         "",
     ]
 
@@ -487,19 +804,22 @@ def format_anti_slop_markdown(result: Dict[str, Any]) -> str:
         lines.append("")
 
     if not findings:
-        lines.append("🎉 **0 AI Slop violations found!** Typography, surface hierarchy, viewport accessibility, and copy pass Reference-First gates.")
+        lines.append("✅ **0 static anti-slop rule violations found.**")
     else:
+        shown = min(len(findings), 50)
         lines.extend([
-            f"## Detected AI Slop Violations ({result.get('findingCount', 0)})",
+            f"## Detected Rule Violations (showing {shown} of {total_cnt})",
             "",
             "| Category | Location | Trigger Snippet | Prescription |",
             "|---|---|---|---|",
         ])
-        for f in findings[:25]:
+        for f in findings[:50]:
             loc = f"`{f.get('file')}:{f.get('line')}`"
             snip = str(f.get("snippet", "")).replace("|", "\\|")
             hint = str(f.get("fixHint", "")).replace("|", "\\|")
             lines.append(f"| `{f.get('category')}` | {loc} | `{snip}` | {hint} |")
+        if total_cnt > shown:
+            lines.append(f"\n*({total_cnt - shown} additional findings omitted in Markdown preview; use `--format json --max-findings 0` for full list.)*")
 
     lines.append("")
     return "\n".join(lines)
@@ -507,26 +827,34 @@ def format_anti_slop_markdown(result: Dict[str, Any]) -> str:
 
 def format_anti_slop_patch_prompt(result: Dict[str, Any]) -> str:
     """Render a copy-pasteable prompt for coding agents to strip AI Slop from the target project."""
+    if result.get("grade") == "UNVERIFIED":
+        return "# Anti-Slop Patch Prompt\n\nNo UI or copy files were found in the target directory.\n"
     findings = result.get("findings", [])
+    total_cnt = result.get("totalFindingCount", len(findings))
     if not findings:
-        return "# Anti-Slop Patch Prompt\n\nNo violations detected — nothing to patch.\n"
+        return "# Anti-Slop Patch Prompt\n\nNo static rule violations detected — nothing to patch.\n"
 
     items = []
-    for idx, f in enumerate(findings[:25], start=1):
+    for idx, f in enumerate(findings[:50], start=1):
         items.append(
             f"{idx}. `{f.get('file')}:{f.get('line')}` (`{f.get('category')}`): "
             f"Found `{f.get('snippet')}` → {f.get('fixHint')}"
         )
+    trunc_note = (
+        f"\n(Showing first {len(items)} of {total_cnt} total violations. Re-run `anti-slop scan .` after patching to verify any remaining items.)"
+        if total_cnt > len(items)
+        else ""
+    )
     body = "\n".join(items)
     return f"""# 🧹 Anti-Slop Surgical De-Slop Prompt
 
-Paste this prompt into **Claude Code**, **Cursor**, or **Windsurf** to eliminate AI Slop:
+Paste this prompt into **Claude Code**, **Cursor**, or **Windsurf** to eliminate static UI & Copy violations:
 
 ```markdown
-Please de-slop this project by resolving the following {len(findings)} deterministic UI & Copy violations.
-Follow `DESIGN.md` and `design-tokens.css` strictly (4-step font scale, 3-step mineral surfaces, 1px hairline borders, zero purple radial blobs, zero UI chrome emojis, and clear Korean ASD-STE100 + Toss copy):
+Please resolve the following {total_cnt} static UI & Copy violations.
+Follow `DESIGN.md` and `design-tokens.css` strictly (4-step font scale, 3-step mineral surfaces, paired `--accent-primary`/`--accent-text` contrast, 1px hairline borders, zero purple radial blobs, zero UI chrome emojis, and clear Korean ASD-STE100 + Toss copy):
 
-{body}
+{body}{trunc_note}
 ```
 """
 
@@ -536,6 +864,7 @@ def lock_design_system(
     archetype: str = "linear-precision",
     project_name: Optional[str] = None,
     write_files: bool = True,
+    force: bool = False,
 ) -> Dict[str, Any]:
     """Generate Reference-First `DESIGN.md` and `design-tokens.css` in the target project root."""
     root = Path(target_path).expanduser().resolve()
@@ -544,6 +873,15 @@ def lock_design_system(
     spec = ARCHETYPE_PRESETS.get(archetype)
     if not spec:
         raise ValueError(f"Unknown archetype `{archetype}`. Choose from: {', '.join(ARCHETYPE_PRESETS.keys())}")
+
+    d_path = root / "DESIGN.md"
+    t_path = root / "design-tokens.css"
+    if write_files and not force and (d_path.exists() or t_path.exists()):
+        existing = [p.name for p in (d_path, t_path) if p.exists()]
+        raise FileExistsError(
+            f"Design lock file(s) already exist ({', '.join(existing)}). "
+            "Pass `--force` to back up existing files (`.bak`) and overwrite."
+        )
 
     proj = project_name or root.name
     today = datetime.date.today().isoformat()
@@ -584,6 +922,7 @@ def lock_design_system(
 
 - **4-Step Typography**: `--font-caption` (`0.75rem` / 12px), `--font-body` (`0.875rem` / 14px), `--font-title` (`1rem` / 16px), `--font-display` (`clamp(1.5rem, 2.5vw, 2.25rem)`).
 - **3-Step Surface**: `--surface-canvas` (`{lt['--surface-canvas']}`), `--surface-card` (`{lt['--surface-card']}`), `--surface-sheet` (`{lt['--surface-sheet']}`).
+- **Contrast-Safe Action Pair**: `--accent-primary` (`{lt['--accent-primary']}`) paired with `--accent-text` (`{lt['--accent-text']}`).
 - **Status Indicator**: `.status-dot-sm` (6px semantic circle, zero emoji chrome).
 """
 
@@ -617,6 +956,7 @@ html[data-theme="light"] {{
   --text-secondary: {lt['--text-secondary']};
   --text-muted: {lt['--text-muted']};
   --accent-primary: {lt['--accent-primary']};
+  --accent-text: {lt['--accent-text']};
 }}
 
 html[data-theme="dark"] {{
@@ -632,6 +972,7 @@ html[data-theme="dark"] {{
   --text-secondary: {dk['--text-secondary']};
   --text-muted: {dk['--text-muted']};
   --accent-primary: {dk['--accent-primary']};
+  --accent-text: {dk['--accent-text']};
 }}
 
 .status-dot-sm {{
@@ -648,9 +989,14 @@ html[data-theme="dark"] {{
 """
 
     written = {}
+    backups = {}
     if write_files:
-        d_path = root / "DESIGN.md"
-        t_path = root / "design-tokens.css"
+        if force:
+            for p in (d_path, t_path):
+                if p.exists():
+                    bak = p.with_suffix(p.suffix + ".bak")
+                    shutil.copy2(p, bak)
+                    backups[p.name] = str(bak)
         d_path.write_text(design_md, encoding="utf-8")
         t_path.write_text(tokens_css, encoding="utf-8")
         written = {"designMd": str(d_path), "designTokensCss": str(t_path)}
@@ -660,6 +1006,7 @@ html[data-theme="dark"] {{
         "archetype": archetype,
         "projectName": proj,
         "writtenFiles": written,
+        "backups": backups,
         "designMd": design_md,
         "designTokensCss": tokens_css,
     }
@@ -668,18 +1015,21 @@ html[data-theme="dark"] {{
 def cli(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="anti-slop",
-        description="Anti-Slop Ship Gate — UI & Copy Slop Scanner and Reference-First Design Lock",
+        description="Anti-Slop Ship Gate — Static UI & Copy Rule Scanner and Reference-First Design Lock",
     )
     sub = parser.add_subparsers(dest="subcommand")
 
-    scan_p = sub.add_parser("scan", help="Scan a project or file for UI and copy AI Slop")
+    scan_p = sub.add_parser("scan", help="Scan a project or file for static UI and copy AI Slop rules")
     scan_p.add_argument("path", nargs="?", default=".", help="Target path to scan (default: .)")
     scan_p.add_argument("--format", default="markdown", choices=["json", "markdown", "prompt"])
+    scan_p.add_argument("--max-findings", type=int, default=100, help="Max findings to return (0 for unlimited)")
+    scan_p.add_argument("--exit-zero", action="store_true", help="Always exit 0 even when violations are found")
 
     lock_p = sub.add_parser("lock", help="Generate DESIGN.md and design-tokens.css lock files")
     lock_p.add_argument("path", nargs="?", default=".", help="Target directory to lock (default: .)")
     lock_p.add_argument("--archetype", default="linear-precision", choices=list(ARCHETYPE_PRESETS.keys()))
     lock_p.add_argument("--project-name", default=None)
+    lock_p.add_argument("--force", action="store_true", help="Back up (.bak) and overwrite existing DESIGN.md / design-tokens.css")
 
     args = parser.parse_args(argv)
     cmd = args.subcommand or "scan"
@@ -690,12 +1040,15 @@ def cli(argv: Optional[List[str]] = None) -> int:
                 archetype=getattr(args, "archetype", "linear-precision"),
                 project_name=getattr(args, "project_name", None),
                 write_files=True,
+                force=bool(getattr(args, "force", False)),
             )
-            print(json.dumps({"ok": True, "archetype": res["archetype"], "writtenFiles": res["writtenFiles"]}, indent=2, ensure_ascii=False))
+            print(json.dumps({"ok": True, "archetype": res["archetype"], "writtenFiles": res["writtenFiles"], "backups": res["backups"]}, indent=2, ensure_ascii=False))
             return 0
         else:
             fmt = getattr(args, "format", "markdown")
-            res = scan_anti_slop(getattr(args, "path", "."), output_format=fmt)
+            max_f = int(getattr(args, "max_findings", 100))
+            exit_zero = bool(getattr(args, "exit_zero", False))
+            res = scan_anti_slop(getattr(args, "path", "."), output_format=fmt, max_findings=max_f)
             if fmt == "json":
                 printable = {k: v for k, v in res.items() if k not in ("markdownReport", "patchPromptMarkdown")}
                 print(json.dumps(printable, indent=2, ensure_ascii=False))
@@ -703,10 +1056,19 @@ def cli(argv: Optional[List[str]] = None) -> int:
                 print(res["patchPromptMarkdown"])
             else:
                 print(res["markdownReport"])
+            if exit_zero:
+                return 0
+            if res.get("grade") == "UNVERIFIED":
+                return 2
+            if res.get("totalFindingCount", 0) > 0:
+                return 1
             return 0
+    except FileExistsError as exc:
+        print(json.dumps({"ok": False, "error": str(exc), "type": "FileExistsError"}, ensure_ascii=False), file=sys.stderr)
+        return 2
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc), "type": type(exc).__name__}, ensure_ascii=False), file=sys.stderr)
-        return 1
+        return 2
 
 
 if __name__ == "__main__":
