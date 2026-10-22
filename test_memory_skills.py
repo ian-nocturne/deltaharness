@@ -11,18 +11,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-_mb_dir = Path.home() / '.gemini' / 'antigravity' / 'mobile-bridge'
-if _mb_dir.is_dir() and str(_mb_dir) not in sys.path:
-    sys.path.append(str(_mb_dir))
 
 import work_memory as ledger
 import memory_intelligence as memory
 import memory_skills as skills_ledger
-try:
-    from work_store import WorkStore
-    from work_service import WorkService
-except ImportError:
-    from prism_memory.standalone import StandaloneStore as WorkStore, StandaloneService as WorkService
+from prism_memory.standalone import StandaloneStore as WorkStore, StandaloneService as WorkService
 
 OWNER = '19f22446-0dce-4dce-945b-6011b559e10c'
 CLI = str(Path(__file__).resolve().parent / 'memory_cli.py')
@@ -1524,83 +1517,85 @@ class MemorySkillsLoopTests(unittest.TestCase):
             if cid.startswith(('goal:', 'constraint:', 'decision:')):
                 self.assertIn((cid, ctext), core_after)
 
-    def test_v66_stage2_onboarding_qr_and_provider_discovery(self):
-        import prism_config
-        import prism_init
+    def test_v84_js_ts_template_regex_jsx_and_hoc_signatures(self):
+        from prism_memory.code_anchors import extract_file_symbol_signatures
+        from prism_memory.audit import audit_repository
 
-        url = 'https://127.0.0.1:4388'
-        matrix = prism_init.encode_qr_matrix(url)
-        self.assertGreaterEqual(len(matrix), 21)
-        self.assertEqual(len(matrix), len(matrix[0]))
-        # Top-left 7x7 finder pattern outer corner and center must be dark (True)
-        self.assertTrue(matrix[0][0])
-        self.assertTrue(matrix[3][3])
-        self.assertFalse(matrix[1][1])
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            # 1) Template string & regex literal interior declarations must NOT be extracted as symbols
+            p_tmpl = root / 'tmpl.ts'
+            p_tmpl.write_text('const text = `\nexport function Ghost(x) {}\n`;\nexport const real = x => x;\n', encoding='utf-8')
+            sig_tmpl = extract_file_symbol_signatures(p_tmpl)
+            self.assertTrue(sig_tmpl['__syntax_ok__'])
+            self.assertNotIn('Ghost', sig_tmpl['symbols'])
+            self.assertIn('real', sig_tmpl['symbols'])
 
-        svg = prism_init.render_qr_svg(url)
-        self.assertTrue(svg.startswith('<svg '))
-        self.assertIn('viewBox="0 0 ', svg)
-        self.assertTrue(svg.endswith('</svg>'))
+            # 2) Unclosed regex literal or empty assignment `const x = ;` must flag __syntax_ok__ = False
+            p_unclosed = root / 'unclosed.ts'
+            p_unclosed.write_text('export const r = /unterminated', encoding='utf-8')
+            self.assertFalse(extract_file_symbol_signatures(p_unclosed)['__syntax_ok__'])
 
-        term = prism_init.render_qr_terminal(url)
-        self.assertGreaterEqual(len(term.splitlines()), 10)
+            p_empty_assign = root / 'empty_assign.ts'
+            p_empty_assign.write_text('export const real = () => { const x = ; return x; };', encoding='utf-8')
+            self.assertFalse(extract_file_symbol_signatures(p_empty_assign)['__syntax_ok__'])
 
-        status = prism_init.get_onboarding_status(write_config=False)
-        self.assertTrue(status['ok'])
-        provider_ids = [p['id'] for p in status['providers']]
-        self.assertEqual(['antigravity', 'claude', 'codex', 'muse'], provider_ids)
-        self.assertIn('primaryMobileUrl', status['endpoints'])
-        self.assertTrue(status['endpoints']['qrSvg'].startswith('<svg '))
+            # 3) Nested HOCs (`React.memo(React.forwardRef(...))`), generic HOC (`withAuth(...)`), and JSX closing tags (`</div>`)
+            p_hoc = root / 'hoc.tsx'
+            p_hoc.write_text(
+                'export const App = React.memo(React.forwardRef((props, ref) => <div className="x">ok</div>));\n'
+                'export const Guarded = withAuth((props) => <span>hi</span>);\n',
+                encoding='utf-8',
+            )
+            sig_hoc = extract_file_symbol_signatures(p_hoc)
+            self.assertTrue(sig_hoc['__syntax_ok__'])
+            self.assertIn('App', sig_hoc['symbols'])
+            self.assertIn('Guarded', sig_hoc['symbols'])
 
-        portable = prism_config.as_portable_dict()
-        self.assertIn('ai_workspace_dir', portable)
-        self.assertIn('local_http_port', portable)
+            (root / 'AGENTS.md').write_text('Use `tmpl.ts::Ghost`.\n', encoding='utf-8')
+            aud = audit_repository(root)
+            self.assertFalse(aud['ok'])
+            self.assertEqual(1, aud['countsByRule'].get('missing_symbol', 0))
 
-    def test_v67_stage3_baton_touch_and_domain_packs(self):
-        import prism_packs
+    def test_v84_audit_strict_workspace_cd_and_tutorial_guards(self):
+        from prism_memory.audit import audit_repository
 
-        mock_quota = {
-            'pools': [
-                {'poolId': 'Gemini_Weekly', 'poolTitle': 'Antigravity Gemini Weekly', 'isWeekly': True, 'remainingPct': 91.5},
-            ],
-            'externalPools': [
-                {'poolId': 'Claude_Sub_Weekly', 'poolTitle': 'Claude Max Weekly', 'isWeekly': True, 'remainingPct': 8.0},
-                {'poolId': 'ChatGPT_Plus_Weekly', 'poolTitle': 'ChatGPT Codex Weekly', 'isWeekly': True, 'remainingPct': 64.0},
-            ],
-        }
-        rec = prism_packs.recommend_baton_touch(mock_quota, current_provider='claude', threshold_pct=15.0)
-        self.assertTrue(rec['ok'])
-        self.assertTrue(rec['shouldRecommend'])
-        self.assertEqual('antigravity', rec['recommended']['provider'])
-        self.assertEqual(91.5, rec['recommended']['remainingPct'])
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            # 1) Wrong package script after `cd packages/app` must NOT fall back to root package.json
+            w_pkg = root / 'wrong_pkg'
+            (w_pkg / 'packages' / 'app').mkdir(parents=True)
+            (w_pkg / 'package.json').write_text('{"scripts":{"build":"echo root"}}', encoding='utf-8')
+            (w_pkg / 'packages' / 'app' / 'package.json').write_text('{"scripts":{}}', encoding='utf-8')
+            (w_pkg / 'AGENTS.md').write_text('```sh\ncd packages/app\nnpm run build\n```\n', encoding='utf-8')
+            res_wp = audit_repository(w_pkg)
+            self.assertFalse(res_wp['ok'])
+            self.assertEqual(1, res_wp['countsByRule'].get('missing_script', 0))
 
-        # Export & import round-trip in isolated temporary directory
-        self.learn_experience()
-        orig_skills_root = prism_packs.SKILLS_ROOT
-        try:
-            prism_packs.SKILLS_ROOT = self.root / 'memory_skills'
-            listing = prism_packs.list_domain_packs()
-            self.assertTrue(listing['ok'])
-            self.assertGreaterEqual(listing['totalSkillCount'], 1)
+            # 2) Wrong path after `cd packages/b` must NOT suffix-match `packages/a/src/main.ts`
+            w_path = root / 'wrong_path'
+            (w_path / 'packages' / 'a' / 'src').mkdir(parents=True)
+            (w_path / 'packages' / 'b').mkdir(parents=True)
+            (w_path / 'packages' / 'a' / 'src' / 'main.ts').write_text('export const main = 1;\n', encoding='utf-8')
+            (w_path / 'packages' / 'b' / 'package.json').write_text('{}', encoding='utf-8')
+            (w_path / 'AGENTS.md').write_text('```sh\ncd packages/b\nnode src/main.ts\n```\n', encoding='utf-8')
+            res_wpath = audit_repository(w_path)
+            self.assertFalse(res_wpath['ok'])
+            self.assertEqual(1, res_wpath['countsByRule'].get('missing_path', 0))
 
-            exported = prism_packs.export_domain_pack('all', sanitize_paths=True, write_file=False)
-            self.assertTrue(exported['ok'])
-            bundle = exported['bundle']
-            self.assertEqual('prism.domain-pack.v1', bundle['schema'])
-            self.assertGreaterEqual(bundle['skillCount'], 1)
-            for s in bundle['skills']:
-                self.assertNotIn('/Users/alice', s['skillMarkdown'])
+            # 3) `Run \`gone.py\`` flags missing_path while `Create a file named \`server.py\`. Then run \`python server.py\`` passes
+            m_bare = root / 'missing_bare'
+            m_bare.mkdir()
+            (m_bare / 'AGENTS.md').write_text('Run `gone.py`.\n', encoding='utf-8')
+            res_bare = audit_repository(m_bare)
+            self.assertFalse(res_bare['ok'])
+            self.assertEqual(1, res_bare['countsByRule'].get('missing_path', 0))
 
-            imp1 = prism_packs.import_domain_pack(bundle, target_task_dir='imported_stage3_test', overwrite=False)
-            self.assertTrue(imp1['ok'])
-            self.assertEqual(bundle['skillCount'], imp1['importedCount'])
-            self.assertEqual(0, imp1['skippedCount'])
-
-            imp2 = prism_packs.import_domain_pack(bundle, target_task_dir='imported_stage3_test', overwrite=False)
-            self.assertEqual(0, imp2['importedCount'])
-            self.assertEqual(bundle['skillCount'], imp2['skippedCount'])
-        finally:
-            prism_packs.SKILLS_ROOT = orig_skills_root
+            tut = root / 'tutorial'
+            tut.mkdir()
+            (tut / 'README.md').write_text('Create a file named `server.py`. Then run `python server.py`.\n', encoding='utf-8')
+            res_tut = audit_repository(tut)
+            self.assertTrue(res_tut['ok'])
 
     def test_v60_in_memory_inverted_index_and_link_cache_sub5ms(self):
         self.learn_experience()
@@ -1850,127 +1845,90 @@ class MemorySkillsLoopTests(unittest.TestCase):
         self.assertNotIn('ops@company.io', ' '.join(transferred['steps']))
         self.assertIn('<project>/', transferred['title'])
 
-    def test_v68_stage4_modular_routes_and_macos_app_bundle(self):
-        import os
-        import prism_app
-        import prism_routes
-        import prism_packs
+    def test_v84_viberescue_string_env_rls_disable_and_written_files_scrub(self):
+        from prism_memory.viberescue import build_rescue_bundle
 
-        # 1. Verify macOS .app bundle generator in an isolated temp directory
-        app_res = prism_app.build_macos_app_bundle(target_app_path=self.root / 'Applications' / 'PRISM.app')
-        self.assertTrue(app_res['ok'])
-        bundle_dir = Path(app_res['appPath'])
-        self.assertTrue((bundle_dir / 'Contents' / 'Info.plist').is_file())
-        self.assertTrue((bundle_dir / 'Contents' / 'Resources' / 'prism-icon.svg').is_file())
-        exec_path = bundle_dir / 'Contents' / 'MacOS' / 'PRISM'
-        self.assertTrue(exec_path.is_file())
-        self.assertTrue(os.access(exec_path, os.X_OK))
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            # 1) String literal `"process.env.REMOVED_API_KEY"` must NOT be flagged as an env reference
+            s_dir = root / 'str_ref'
+            s_dir.mkdir()
+            (s_dir / 'client.js').write_text('const example = "process.env.REMOVED_API_KEY";\n', encoding='utf-8')
+            res_str = build_rescue_bundle(s_dir)
+            self.assertEqual('STATIC_CHECKS_PASSED', res_str['readiness'])
+            self.assertEqual(0, res_str['exitCode'])
 
-        # 2. Verify modular route dispatcher GET endpoints
-        code_ob, payload_ob = prism_routes.dispatch_get('/api/onboarding/status', {}, None)
-        self.assertEqual(200, code_ob)
-        self.assertTrue(payload_ob['ok'])
-        self.assertIn('qrSvg', payload_ob['endpoints'])
+            # 2) Later migration `DISABLE ROW LEVEL SECURITY` must flag BLOCKED
+            rls_dir = root / 'rls_dis'
+            rls_dir.mkdir()
+            (rls_dir / '001.sql').write_text(
+                'CREATE TABLE public.orders(id uuid, user_id uuid);\n'
+                'ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;\n'
+                'CREATE POLICY own ON public.orders USING (auth.uid() = user_id);\n',
+                encoding='utf-8',
+            )
+            (rls_dir / '002.sql').write_text('ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;\n', encoding='utf-8')
+            res_rls = build_rescue_bundle(rls_dir)
+            self.assertEqual('BLOCKED', res_rls['readiness'])
+            self.assertEqual(1, res_rls['exitCode'])
 
-        code_pk, payload_pk = prism_routes.dispatch_get('/api/packs', {}, None)
-        self.assertEqual(200, code_pk)
-        self.assertTrue(payload_pk['ok'])
-        self.assertGreaterEqual(len(payload_pk['packs']), 1)
+            # 3) `writtenFiles` paths must be scrubbed when `write_files=True`
+            sec_dir = root / 'vr_sk_live_syntheticAuditOnly12345'
+            sec_dir.mkdir()
+            (sec_dir / 'index.js').write_text('export const ok = 1;\n', encoding='utf-8')
+            res_sec = build_rescue_bundle(sec_dir, write_files=True)
+            self.assertTrue(res_sec['secretSafety']['verifiedOutputClean'])
+            self.assertNotIn('sk_live_syntheticAuditOnly12345', json.dumps(res_sec['writtenFiles']))
 
-        code_st, payload_st = prism_routes.dispatch_get('/api/app/status', {}, None)
-        self.assertEqual(200, code_st)
-        self.assertTrue(payload_st['ok'])
-        self.assertEqual('ai.prism.orchestrator', payload_st['bundleId'])
+    def test_v84_anti_slop_rgb_contrast_and_backup_preservation(self):
+        from prism_memory.anti_slop import scan_anti_slop, lock_design_system
 
-        # 3. Verify modular route dispatcher POST endpoints (pack import in isolated dir)
-        exp_res = prism_packs.export_domain_pack('all', sanitize_paths=True, write_file=False)
-        imp_code, imp_payload = prism_routes.dispatch_post(
-            '/api/packs/import',
-            {'bundle': exp_res['bundle'], 'targetTaskDir': str(self.root / 'imported_pack'), 'overwrite': True},
-            None,
-        )
-        self.assertEqual(200, imp_code)
-        self.assertTrue(imp_payload['ok'])
-        self.assertGreaterEqual(imp_payload['importedCount'], 1)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            # 1) `rgb(...)` low contrast detection
+            rgb_dir = root / 'rgb_case'
+            rgb_dir.mkdir()
+            lock_design_system(rgb_dir, write_files=True)
+            (rgb_dir / 'style.css').write_text('.btn { background: rgb(255, 255, 255); color: rgb(250, 250, 250); }\n', encoding='utf-8')
+            res_rgb = scan_anti_slop(rgb_dir)
+            self.assertFalse(res_rgb['ok'])
+            self.assertGreaterEqual(res_rgb['byCategory'].get('low_contrast_text', 0), 1)
 
-    def test_v69_stage5_showcase_landing_and_launch_banners(self):
-        import prism_routes
-        import prism_showcase
+            # 2) Repeated `lock_design_system(..., force=True)` preserves original `.bak`
+            bak_dir = root / 'bak_case'
+            bak_dir.mkdir()
+            (bak_dir / 'DESIGN.md').write_text('ORIGINAL', encoding='utf-8')
+            (bak_dir / 'design-tokens.css').write_text('ORIGINAL_CSS', encoding='utf-8')
+            lock_design_system(bak_dir, write_files=True, force=True)
+            lock_design_system(bak_dir, write_files=True, force=True)
+            self.assertEqual('ORIGINAL', (bak_dir / 'DESIGN.md.bak').read_text(encoding='utf-8'))
+            self.assertEqual('ORIGINAL_CSS', (bak_dir / 'design-tokens.css.bak').read_text(encoding='utf-8'))
 
-        # 1. Verify showcase HTML rendering and static file export
-        out_html = prism_showcase.write_showcase_html_file(target_path=self.root / 'showcase.html')
-        self.assertTrue(out_html.is_file())
-        html_text = out_html.read_text(encoding='utf-8')
-        self.assertIn('PRISM', html_text)
-        self.assertIn('data-ui="baton-simulator"', html_text)
-        self.assertIn('$149', html_text)
-        self.assertIn('$29', html_text)
+    def test_v84_cli_and_action_exit_code_parity(self):
+        from prism_memory.viberescue import cli as vr_cli
+        import memory_cli, io
+        from contextlib import redirect_stdout
 
-        # 2. Verify raw GET dispatcher for /showcase and launch SVG banners
-        raw_sc = prism_routes.dispatch_raw_get('/showcase')
-        self.assertIsNotNone(raw_sc)
-        self.assertEqual(200, raw_sc[0])
-        self.assertIn('text/html', raw_sc[1])
-
-        raw_og = prism_routes.dispatch_raw_get('/assets/banners/prism-launch/og-prism-1200x630.svg')
-        self.assertIsNotNone(raw_og)
-        self.assertEqual(200, raw_og[0])
-        self.assertIn('image/svg+xml', raw_og[1])
-        self.assertIn(b'viewBox="0 0 1200 630"', raw_og[2])
-
-        raw_hdr = prism_routes.dispatch_raw_get('/assets/banners/prism-launch/header-prism-1500x500.svg')
-        self.assertIsNotNone(raw_hdr)
-        self.assertEqual(200, raw_hdr[0])
-        self.assertIn(b'viewBox="0 0 1500 500"', raw_hdr[2])
-
-        # 3. Verify JSON metadata route /api/showcase/assets
-        code_as, payload_as = prism_routes.dispatch_get('/api/showcase/assets', {}, None)
-        self.assertEqual(200, code_as)
-        self.assertTrue(payload_as['ok'])
-        self.assertEqual(2, len(payload_as['banners']))
-        self.assertTrue(all(b['exists'] for b in payload_as['banners']))
-
-    def test_v70_telegram_direct_reset_and_new_model_release_alerts(self):
-        import routing_policy
-        from model_evolution import ModelEvolution, model_record
-        from notification_copy import notification_keyboard, notification_text
-        from notification_policy import NotificationPolicy
-
-        policy = routing_policy.load_policy()
-        now = 1_800_000_000.0
-        evo = ModelEvolution(self.root, clock=lambda: now)
-
-        rows = [
-            model_record('claude', 'claude-opus-4-7', 'high', 'Opus 4.7 (high)'),
-            model_record('claude', 'claude-fable-5-5', 'high', 'Claude Fable 5.5 (high)'),
-            model_record('claude', 'claude-fable-5-5', 'max', 'Claude Fable 5.5 (max)'),
-        ]
-        evo.ingest('claude', rows, policy)
-
-        releases = evo.new_releases(policy)
-        self.assertEqual(1, len(releases))
-        rel = releases[0]
-        self.assertEqual('claude', rel['host'])
-        self.assertEqual('claude-fable-5-5', rel['model'])
-        self.assertEqual('Claude Fable 5.5', rel['displayName'])
-        self.assertEqual(['high', 'max'], rel['efforts'])
-        self.assertEqual('claude-fable-5-1', rel['previousModel'])
-
-        np = NotificationPolicy(self.root / 'test_notif.sqlite3')
-        events_first = np.new_models(releases, now)
-        self.assertEqual(1, len(events_first))
-        ev = events_first[0]
-        self.assertEqual('new_model', ev['kind'])
-        self.assertEqual([], np.new_models(releases, now + 60))
-
-        txt = notification_text(ev, {})
-        self.assertIn('✨ 새 모델 출시 감지', txt)
-        self.assertIn('Claude Fable 5.5', txt)
-        self.assertIn('claude-fable-5-5', txt)
-        self.assertIn('high, max', txt)
-        self.assertIn('claude-fable-5-1', txt)
-        kb = notification_keyboard(ev, '')
-        self.assertEqual('quota_status', kb['inline_keyboard'][0][0]['callback_data'])
+        with tempfile.TemporaryDirectory() as td:
+            warn_dir = Path(td) / 'warn_case'
+            warn_dir.mkdir()
+            (warn_dir / '001.sql').write_text(
+                'CREATE TABLE public.items(id uuid);\n'
+                'ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;\n'
+                'CREATE POLICY pub_read ON public.items USING (true);\n',
+                encoding='utf-8',
+            )
+            with redirect_stdout(io.StringIO()):
+                code_vr = vr_cli(['pack', str(warn_dir), '--format', 'json'])
+            old_argv = sys.argv
+            try:
+                sys.argv = ['prism-memory', 'rescue', str(warn_dir)]
+                with redirect_stdout(io.StringIO()):
+                    code_mem = memory_cli.cli()
+            finally:
+                sys.argv = old_argv
+            self.assertEqual(1, code_vr)
+            self.assertEqual(1, code_mem)
 
     def test_v70_ast_signature_self_healing_vs_breaking_change_guard(self):
         target_py = self.root / 'engine_core.py'

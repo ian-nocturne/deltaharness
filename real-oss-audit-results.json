@@ -27,25 +27,15 @@
         "skills/update-provider-models/SKILL.md",
         "skills/use-ai-sdk/SKILL.md"
       ],
-      "totalReferencesChecked": 149,
-      "findingCount": 3,
-      "errorCount": 3,
+      "totalReferencesChecked": 150,
+      "findingCount": 1,
+      "errorCount": 1,
       "warningCount": 0,
       "countsByRule": {
-        "missing_path": 3
+        "missing_path": 1
       },
-      "elapsedMs": 1319.58,
+      "elapsedMs": 802.49,
       "findings": [
-        {
-          "ruleId": "missing_path",
-          "severity": "error",
-          "docPath": "AGENTS.md",
-          "line": 94,
-          "targetPath": "src/stream-text/openai.ts",
-          "symbol": null,
-          "message": "`AGENTS.md:94`에서 참조한 파일 `src/stream-text/openai.ts`를 저장소에서 찾을 수 없어요.",
-          "remediation": "삭제되었거나 이동된 경로 `src/stream-text/openai.ts`를 최신 파일 경로로 교체하세요."
-        },
         {
           "ruleId": "missing_path",
           "severity": "error",
@@ -55,16 +45,6 @@
           "symbol": null,
           "message": "`CONTRIBUTING.md:86`에서 참조한 파일 `src/stream-text/openai.ts`를 저장소에서 찾을 수 없어요.",
           "remediation": "삭제되었거나 이동된 경로 `src/stream-text/openai.ts`를 최신 파일 경로로 교체하세요."
-        },
-        {
-          "ruleId": "missing_path",
-          "severity": "error",
-          "docPath": "skills/develop-ai-functions-example/SKILL.md",
-          "line": 47,
-          "targetPath": "generate-text/openai.ts",
-          "symbol": null,
-          "message": "`skills/develop-ai-functions-example/SKILL.md:47`에서 참조한 파일 `generate-text/openai.ts`를 저장소에서 찾을 수 없어요.",
-          "remediation": "삭제되었거나 이동된 경로 `generate-text/openai.ts`를 최신 파일 경로로 교체하세요."
         }
       ]
     },
@@ -491,12 +471,12 @@
         ".agents/skills/sensitive-logging-audit/SKILL.md",
         ".agents/skills/test-coverage-improver/SKILL.md"
       ],
-      "totalReferencesChecked": 1164,
+      "totalReferencesChecked": 1161,
       "findingCount": 0,
       "errorCount": 0,
       "warningCount": 0,
       "countsByRule": {},
-      "elapsedMs": 2416.46,
+      "elapsedMs": 1766.21,
       "findings": []
     },
     {
@@ -859,14 +839,14 @@
         "classic/forge/CLAUDE.md",
         "classic/original_autogpt/CLAUDE.md"
       ],
-      "totalReferencesChecked": 1476,
-      "findingCount": 14,
-      "errorCount": 14,
+      "totalReferencesChecked": 1432,
+      "findingCount": 9,
+      "errorCount": 9,
       "warningCount": 0,
       "countsByRule": {
-        "missing_path": 14
+        "missing_path": 9
       },
-      "elapsedMs": 3765.1,
+      "elapsedMs": 2555.12,
       "findings": [
         {
           "ruleId": "missing_path",
@@ -941,26 +921,6 @@
         {
           "ruleId": "missing_path",
           "severity": "error",
-          "docPath": "docs/content/classic/setup/index.md",
-          "line": 244,
-          "targetPath": "classic/forge/llamafile.py",
-          "symbol": null,
-          "message": "`docs/content/classic/setup/index.md:244`에서 참조한 파일 `classic/forge/llamafile.py`를 저장소에서 찾을 수 없어요.",
-          "remediation": "삭제되었거나 이동된 경로 `classic/forge/llamafile.py`를 최신 파일 경로로 교체하세요."
-        },
-        {
-          "ruleId": "missing_path",
-          "severity": "error",
-          "docPath": "docs/content/classic/setup/index.md",
-          "line": 263,
-          "targetPath": "classic/forge/llamafile.py",
-          "symbol": null,
-          "message": "`docs/content/classic/setup/index.md:263`에서 참조한 파일 `classic/forge/llamafile.py`를 저장소에서 찾을 수 없어요.",
-          "remediation": "삭제되었거나 이동된 경로 `classic/forge/llamafile.py`를 최신 파일 경로로 교체하세요."
-        },
-        {
-          "ruleId": "missing_path",
-          "severity": "error",
           "docPath": "docs/content/forge/get-started.md",
           "line": 22,
           "targetPath": "classic/forge/agent/forge_agent.py",
@@ -971,42 +931,12 @@
         {
           "ruleId": "missing_path",
           "severity": "error",
-          "docPath": "docs/engineering/tests.md",
-          "line": 262,
-          "targetPath": "frontend/src/playwright/building-agents-happy-path.spec.ts",
-          "symbol": null,
-          "message": "`docs/engineering/tests.md:262`에서 참조한 파일 `frontend/src/playwright/building-agents-happy-path.spec.ts`를 저장소에서 찾을 수 없어요.",
-          "remediation": "삭제되었거나 이동된 경로 `frontend/src/playwright/building-agents-happy-path.spec.ts`를 최신 파일 경로로 교체하세요."
-        },
-        {
-          "ruleId": "missing_path",
-          "severity": "error",
           "docPath": ".claude/skills/vercel-react-best-practices/SKILL.md",
           "line": 114,
           "targetPath": "rules/_sections.md",
           "symbol": null,
           "message": "`.claude/skills/vercel-react-best-practices/SKILL.md:114`에서 참조한 파일 `rules/_sections.md`를 저장소에서 찾을 수 없어요.",
           "remediation": "삭제되었거나 이동된 경로 `rules/_sections.md`를 최신 파일 경로로 교체하세요."
-        },
-        {
-          "ruleId": "missing_path",
-          "severity": "error",
-          "docPath": ".claude/skills/write-frontend-tests/SKILL.md",
-          "line": 92,
-          "targetPath": "src/app/api/__generated__/endpoints/library/library.msw.ts",
-          "symbol": null,
-          "message": "`.claude/skills/write-frontend-tests/SKILL.md:92`에서 참조한 파일 `src/app/api/__generated__/endpoints/library/library.msw.ts`를 저장소에서 찾을 수 없어요.",
-          "remediation": "삭제되었거나 이동된 경로 `src/app/api/__generated__/endpoints/library/library.msw.ts`를 최신 파일 경로로 교체하세요."
-        },
-        {
-          "ruleId": "missing_path",
-          "severity": "error",
-          "docPath": "autogpt_platform/backend/AGENTS.md",
-          "line": 135,
-          "targetPath": "tools/release.py",
-          "symbol": null,
-          "message": "`autogpt_platform/backend/AGENTS.md:135`에서 참조한 파일 `tools/release.py`를 저장소에서 찾을 수 없어요.",
-          "remediation": "삭제되었거나 이동된 경로 `tools/release.py`를 최신 파일 경로로 교체하세요."
         }
       ]
     },
@@ -1026,7 +956,7 @@
       "errorCount": 0,
       "warningCount": 0,
       "countsByRule": {},
-      "elapsedMs": 139.03,
+      "elapsedMs": 88.78,
       "findings": []
     }
   ]

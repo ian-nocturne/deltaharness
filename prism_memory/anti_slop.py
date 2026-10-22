@@ -123,8 +123,8 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#E4E4E7",
             "--token-border-strong": "#D4D4D8",
             "--text-primary": "#09090B",
-            "--text-secondary": "#3F3F46",
-            "--text-muted": "#71717A",
+            "--text-secondary": "#27272A",
+            "--text-muted": "#52525B",
             "--accent-primary": "#18181B",
             "--accent-text": "#FAFAFA",
         },
@@ -136,8 +136,8 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#27272A",
             "--token-border-strong": "#3F3F46",
             "--text-primary": "#FAFAFA",
-            "--text-secondary": "#A1A1AA",
-            "--text-muted": "#71717A",
+            "--text-secondary": "#D4D4D8",
+            "--text-muted": "#A1A1AA",
             "--accent-primary": "#FAFAFA",
             "--accent-text": "#09090B",
         },
@@ -174,8 +174,8 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#E5E5E0",
             "--token-border-strong": "#D1D1C7",
             "--text-primary": "#111827",
-            "--text-secondary": "#374151",
-            "--text-muted": "#6B7280",
+            "--text-secondary": "#1F2937",
+            "--text-muted": "#4B5563",
             "--accent-primary": "#0F172A",
             "--accent-text": "#FFFFFF",
         },
@@ -187,8 +187,8 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#1E293B",
             "--token-border-strong": "#334155",
             "--text-primary": "#F8FAFC",
-            "--text-secondary": "#CBD5E1",
-            "--text-muted": "#64748B",
+            "--text-secondary": "#E2E8F0",
+            "--text-muted": "#94A3B8",
             "--accent-primary": "#38BDF8",
             "--accent-text": "#090D16",
         },
@@ -199,7 +199,7 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             {
                 "product": "Toss App & Design System (TDS)",
                 "whyItWorks": "1 sentence 1 judgment copy hierarchy, bold numeric contrast, and clean squircle cards without nested borders.",
-                "keyBorrowing": "Use `#F2F4F6` cool gray canvas with pure `#FFFFFF` surface cards and `#3182F6` high-trust action accent.",
+                "keyBorrowing": "Use `#F2F4F6` cool gray canvas with pure `#FFFFFF` surface cards and `#1B64DA` high-trust action accent.",
             },
             {
                 "product": "Karrot (당근) & KakaoBank",
@@ -226,9 +226,9 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#E5E8EB",
             "--token-border-strong": "#D1D6DB",
             "--text-primary": "#191F28",
-            "--text-secondary": "#4E5968",
-            "--text-muted": "#8B95A1",
-            "--accent-primary": "#3182F6",
+            "--text-secondary": "#333D4B",
+            "--text-muted": "#4E5968",
+            "--accent-primary": "#1B64DA",
             "--accent-text": "#FFFFFF",
         },
         "dark": {
@@ -239,10 +239,10 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#262B33",
             "--token-border-strong": "#333A44",
             "--text-primary": "#F9FAFB",
-            "--text-secondary": "#B0B8C1",
-            "--text-muted": "#6B7684",
-            "--accent-primary": "#3182F6",
-            "--accent-text": "#FFFFFF",
+            "--text-secondary": "#D1D6DB",
+            "--text-muted": "#9CA3AF",
+            "--accent-primary": "#60A5FA",
+            "--accent-text": "#090D16",
         },
     },
     "apple-minimal": {
@@ -251,7 +251,7 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             {
                 "product": "Apple Developer Documentation & macOS System Settings",
                 "whyItWorks": "Neutral stone/graphite surfaces, clear typographic weight contrast, and zero neon noise.",
-                "keyBorrowing": "Use `#F5F5F7` canvas, `#FFFFFF` grouped cards, and `#0071E3` semantic action links.",
+                "keyBorrowing": "Use `#F5F5F7` canvas, `#FFFFFF` grouped cards, and `#0066CC` semantic action links.",
             },
             {
                 "product": " Keynote / Apple Newsroom",
@@ -278,9 +278,9 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#D2D2D7",
             "--token-border-strong": "#86868B",
             "--text-primary": "#1D1D1F",
-            "--text-secondary": "#515154",
-            "--text-muted": "#86868B",
-            "--accent-primary": "#0071E3",
+            "--text-secondary": "#3A3A3C",
+            "--text-muted": "#515154",
+            "--accent-primary": "#0066CC",
             "--accent-text": "#FFFFFF",
         },
         "dark": {
@@ -291,8 +291,8 @@ ARCHETYPE_PRESETS: Dict[str, Dict[str, Any]] = {
             "--token-border-subtle": "#38383A",
             "--token-border-strong": "#48484A",
             "--text-primary": "#F5F5F7",
-            "--text-secondary": "#A1A1A6",
-            "--text-muted": "#6E6E73",
+            "--text-secondary": "#D1D1D6",
+            "--text-muted": "#A1A1A6",
             "--accent-primary": "#2997FF",
             "--accent-text": "#000000",
         },
@@ -315,15 +315,31 @@ def _strip_ui_comments_preserve_lines(text: str, ext: str) -> str:
 
 
 def _parse_hex_rgb(color_str: str) -> Optional[Tuple[int, int, int]]:
-    """Parse #RGB or #RRGGBB into (r, g, b) 0..255."""
+    """Parse #RGB, #RRGGBB, or rgb()/rgba() into (r, g, b) 0..255."""
     s = (color_str or "").strip()
     m = re.match(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b", s)
-    if not m:
-        return None
-    hx = m.group(1)
-    if len(hx) == 3:
-        return (int(hx[0] * 2, 16), int(hx[1] * 2, 16), int(hx[2] * 2, 16))
-    return (int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16))
+    if m:
+        hx = m.group(1)
+        if len(hx) == 3:
+            return (int(hx[0] * 2, 16), int(hx[1] * 2, 16), int(hx[2] * 2, 16))
+        return (int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16))
+    m_rgb = re.match(
+        r"^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*([0-9.]+))?\s*\)",
+        s,
+        re.IGNORECASE,
+    )
+    if m_rgb:
+        r, g, b = int(m_rgb.group(1)), int(m_rgb.group(2)), int(m_rgb.group(3))
+        alpha_str = m_rgb.group(4)
+        if alpha_str is not None:
+            try:
+                if float(alpha_str) < 0.85:
+                    return None
+            except ValueError:
+                return None
+        if 0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255:
+            return (r, g, b)
+    return None
 
 
 def _wcag_contrast_ratio(rgb1: Tuple[int, int, int], rgb2: Tuple[int, int, int]) -> float:
@@ -995,7 +1011,10 @@ html[data-theme="dark"] {{
             for p in (d_path, t_path):
                 if p.exists():
                     bak = p.with_suffix(p.suffix + ".bak")
-                    shutil.copy2(p, bak)
+                    if not bak.exists():
+                        shutil.copy2(p, bak)
+                    else:
+                        shutil.copy2(p, p.with_suffix(p.suffix + ".bak.latest"))
                     backups[p.name] = str(bak)
         d_path.write_text(design_md, encoding="utf-8")
         t_path.write_text(tokens_css, encoding="utf-8")

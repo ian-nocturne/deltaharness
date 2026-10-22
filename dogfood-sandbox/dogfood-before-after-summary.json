@@ -1,0 +1,46 @@
+{
+  "before_viberescue": {
+    "readiness": "BLOCKED",
+    "estimatedComplexity": "HIGH_RESCUE_OR_HANDOFF",
+    "totalBlockers": 6,
+    "criticalCount": 5,
+    "warningCount": 1
+  },
+  "before_viberescue_blockers": [
+    "client_secret_exposure",
+    "client_secret_exposure",
+    "supabase_rls_or_auth_gap",
+    "missing_env_key",
+    "competing_lockfiles",
+    "instruction_drift:missing_path"
+  ],
+  "after_viberescue": {
+    "readiness": "STATIC_CHECKS_PASSED",
+    "estimatedComplexity": "NONE",
+    "totalBlockers": 0,
+    "criticalCount": 0,
+    "warningCount": 0
+  },
+  "after_viberescue_blockers": [],
+  "before_antislop": {
+    "slopScore": 100,
+    "cleanlinessScore": 0,
+    "grade": "F",
+    "verdict": "HIGH_STATIC_SLOP_DENSITY",
+    "findingCount": 58,
+    "byCategory": {
+      "missing_design_lock": 1,
+      "viewport_zoom_block": 1,
+      "fractional_font_slop": 34,
+      "emoji_chrome_slop": 22
+    }
+  },
+  "after_antislop": {
+    "slopScore": 0,
+    "cleanlinessScore": 100,
+    "grade": "A+",
+    "verdict": "STATIC_STYLE_RULES_PASSED",
+    "findingCount": 0,
+    "byCategory": {}
+  }
+}

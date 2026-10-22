@@ -1,0 +1,58 @@
+/* ==========================================================================
+   Media Control Tower Reference-First Design Tokens (`linear-precision`)
+   Source of Truth: DESIGN.md
+   Enforced by: anti-slop scan .
+   ========================================================================== */
+
+:root,
+html[data-theme="light"] {
+  --font-caption: 0.75rem;
+  --font-body: 0.875rem;
+  --font-title: 1rem;
+  --font-display: clamp(1.5rem, 2.5vw, 2.25rem);
+
+  --text-xs: var(--font-caption);
+  --text-sm: var(--font-body);
+  --text-base: var(--font-title);
+  --text-lg: 1.25rem;
+
+  --surface-canvas: #FAFAFA;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #F4F4F5;
+  --surface-sheet: rgba(255, 255, 255, 0.88);
+
+  --token-border-subtle: #E4E4E7;
+  --token-border-strong: #D4D4D8;
+
+  --text-primary: #09090B;
+  --text-secondary: #3F3F46;
+  --text-muted: #71717A;
+  --accent-primary: #18181B;
+}
+
+html[data-theme="dark"] {
+  --surface-canvas: #09090B;
+  --surface-card: #121215;
+  --surface-subtle: #18181B;
+  --surface-sheet: rgba(18, 18, 21, 0.88);
+
+  --token-border-subtle: #27272A;
+  --token-border-strong: #3F3F46;
+
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
+  --accent-primary: #FAFAFA;
+}
+
+.status-dot-sm {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background-color: currentColor;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}

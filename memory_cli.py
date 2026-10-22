@@ -158,6 +158,57 @@ def _default_cli_root():
         return str(pkg_dir)
 
 
+def _run_opsec_check(target_path: str, canon_path=None) -> dict:
+    import re
+    from prism_memory.viberescue import SECRET_VALUE_REDACT_RE
+    p = Path(target_path or ".").resolve()
+    if not p.exists():
+        return {"ok": False, "exitCode": 2, "scannedFiles": 0, "findingCount": 0, "findings": [], "error": f"Target not found: {target_path}"}
+    files = [p] if p.is_file() else [
+        f for f in sorted(p.rglob("*"))
+        if f.is_file()
+        and not any(part in {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"} for part in f.parts)
+        and f.suffix.lower() in {".md", ".json", ".html", ".ts", ".tsx", ".js", ".jsx", ".py", ".sh", ".yml", ".yaml", ".toml", ".txt"}
+    ]
+    if not files:
+        return {"ok": False, "exitCode": 2, "scannedFiles": 0, "findingCount": 0, "findings": [], "error": "No scannable files found"}
+    extra_patterns = []
+    if canon_path and Path(canon_path).is_file():
+        try:
+            canon = json.loads(Path(canon_path).read_text(encoding="utf-8"))
+            for ch in (canon.get("characters") or {}).values():
+                for pat in ch.get("forbidden_patterns") or []:
+                    if isinstance(pat, str) and pat and not (pat.startswith("<") and pat.endswith(">")):
+                        extra_patterns.append(("canon_forbidden_pattern", re.compile(pat, re.I)))
+        except Exception:
+            pass
+    host_path_re = re.compile(r"(?:^|[\s\"'`=(]|file://)(?:/Users/(?!alice\b|bob\b|test\b)[A-Za-z0-9_.-]+|/home/(?!runner\b|ubuntu\b|user\b)[A-Za-z0-9_.-]+|[A-Za-z]:\\Users\\[A-Za-z0-9_.-]+)")
+    findings = []
+    for f in files:
+        if f.name in ("test_memory_skills.py",):
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = str(f.relative_to(p)) if p.is_dir() else f.name
+        for line_no, line in enumerate(text.splitlines(), 1):
+            if host_path_re.search(line):
+                findings.append({"ruleId": "host_path_leak", "severity": "error", "file": rel, "line": line_no, "message": "Host filesystem user path detected"})
+            if SECRET_VALUE_REDACT_RE.search(line) and "placeholder" not in line.lower() and "synthetic" not in line.lower():
+                findings.append({"ruleId": "secret_literal_leak", "severity": "error", "file": rel, "line": line_no, "message": "Raw credential or secret token pattern detected"})
+            for rule_id, c_pat in extra_patterns:
+                if c_pat.search(line):
+                    findings.append({"ruleId": rule_id, "severity": "error", "file": rel, "line": line_no, "message": "Forbidden OPSEC pattern detected"})
+    return {
+        "ok": len(findings) == 0,
+        "exitCode": 0 if len(findings) == 0 else 1,
+        "scannedFiles": len(files),
+        "findingCount": len(findings),
+        "findings": findings,
+    }
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',default=_default_cli_root())
@@ -175,6 +226,7 @@ def main():
     resc_p.add_argument('--write',action='store_true');resc_p.add_argument('--output-dir',default=None);resc_p.add_argument('--format',default='json',choices=['json','markdown','prompt']);resc_p.add_argument('--exit-zero',action='store_true')
     slop_p=sub.add_parser('anti-slop');slop_p.add_argument('repo_positional',nargs='?',default=None);slop_p.add_argument('extra_positional',nargs='?',default=None);slop_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
     slop_p.add_argument('--lock',action='store_true');slop_p.add_argument('--force',action='store_true');slop_p.add_argument('--archetype',default='linear-precision');slop_p.add_argument('--format',default='json',choices=['json','markdown','prompt']);slop_p.add_argument('--exit-zero',action='store_true')
+    opsec_p=sub.add_parser('opsec-check');opsec_p.add_argument('repo_positional',nargs='?',default=None);opsec_p.add_argument('--file','--repo-path','--repo',dest='target_file',default=None);opsec_p.add_argument('--canon',default=None)
     heal_p=sub.add_parser('heal-skills');heal_p.add_argument('--dry-run',action='store_true')
     ver_p=sub.add_parser('verify-skill');ver_p.add_argument('--id',required=True);ver_p.add_argument('--command',default=None)
     ver_p.add_argument('--proof-file',default=None);ver_p.add_argument('--operation-id',default='');ver_p.add_argument('--timeout',type=float,default=15.0)
@@ -206,6 +258,9 @@ def main():
     args=parser.parse_args()
     if args.action=='schema':return schema()
     if args.action=='repo-benchmark':return memory.repo_benchmark(work_dir=args.work_dir)
+    if args.action=='opsec-check':
+        target_p=args.target_file or args.repo_positional or '.'
+        return _run_opsec_check(target_p,canon_path=args.canon)
     if args.action=='audit':
         target_repo=args.repo_path or args.repo_positional or '.'
         res=memory.audit_repo(target_repo,base_ref=args.base,head_ref=args.head,output_format=args.format)

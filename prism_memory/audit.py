@@ -98,7 +98,8 @@ NPM_SCRIPT_RE = re.compile(
     r"(?:`|^|\s)(?:npm|pnpm|yarn|bun)\s+run\s+(?P<script>[A-Za-z0-9_:.-]+)"
 )
 YARN_SHORT_SCRIPT_RE = re.compile(
-    r"`(?:yarn|pnpm)\s+(?P<script>(?!install\b|add\b|remove\b|dlx\b|exec\b|init\b|why\b|config\b|--|-)[A-Za-z0-9_:.-]+)`"
+    r"`(?:yarn|pnpm)\s+(?P<script>(?!install\b|add\b|remove\b|dlx\b|exec\b|init\b|why\b|config\b|run\b|tsx\b|--|-)[A-Za-z0-9_:.-]+)`"
+    r"|^\s*(?:\$\s*)?(?:yarn|pnpm)\s+(?P<script2>(?!install\b|add\b|remove\b|dlx\b|exec\b|init\b|why\b|config\b|run\b|tsx\b|create\b|up\b|update\b|link\b|unlink\b|list\b|outdated\b|audit\b|licenses\b|pack\b|publish\b|rebuild\b|store\b|env\b|patch\b|dedupe\b|fetch\b|import\b|approve-builds\b|--|-)[A-Za-z0-9_:.-]+)\s*$"
 )
 
 # Matches `make <target>` inside backticks or explicit shell command lines
@@ -592,11 +593,36 @@ def audit_repository(
 
     cd_cmd_re = re.compile(r"(?:^|[`;&|]\s*|\$\s*)cd\s+([A-Za-z0-9_./-]+)")
     pkg_dir_hint_re = re.compile(
-        r"(?:inside\s+(?:the\s+)?package\s+directory|in\s+each\s+package|package\s+directory|packages/[A-Za-z0-9_.-]+|examples/[A-Za-z0-9_.-]+|apps/[A-Za-z0-9_.-]+)",
+        r"(?:inside\s+(?:the\s+)?package\s+(?:directory|folder)|in\s+(?:the\s+)?package\s+(?:directory|folder)|in\s+each\s+package|package\s+(?:directory|folder)|packages/[A-Za-z0-9_.-]+|examples/[A-Za-z0-9_.-]+|apps/[A-Za-z0-9_.-]+)",
         re.IGNORECASE,
     )
     tutorial_create_re = re.compile(
-        r"(?:create\s+(?:a\s+|an\s+)?(?:new\s+)?(?:file|server|script)|save\s+(?:it\s+)?as|touch\s+|cat\s*<<|파일을\s*생성|새로\s*만들)",
+        r"(?:create\s+(?:a\s+|an\s+)?(?:new\s+)?(?:[A-Za-z0-9_+-]+\s+)?(?:file|server|script|block|module|component)|"
+        r"save\s+(?:it\s+|new\s+cases\s+)?(?:as|under)|"
+        r"for\s+example,\s+`[^`]+`\s+generates\s+`|"
+        r"touch\s+|cat\s*<<|파일을\s*생성|새로\s*만들)",
+        re.IGNORECASE,
+    )
+    prohibitive_line_re = re.compile(
+        r"(?:\b(?:do\s+not|don't|never|avoid)\s+(?:create|use|add|place|put|import|reference|write|commit)\b|"
+        r"\b(?:bad\s+example|anti-pattern|instead\s+of\s+creating)\b)",
+        re.IGNORECASE,
+    )
+    external_repo_re = re.compile(
+        r"(?:\bin\s+the\s+(?:public\s+|private\s+)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\s+repo\b|"
+        r"\bnot\s+here\s*:|\bin\s+another\s+repo(?:sitory)?\b)",
+        re.IGNORECASE,
+    )
+    ref_link_def_re = re.compile(r"^\s*\[[^\]]+\]:\s*https?://", re.IGNORECASE)
+    code_fence_title_re = re.compile(r"^\s*```[A-Za-z0-9_-]*\s+title=", re.IGNORECASE)
+    run_bare_re = re.compile(
+        r"(?:^\s*(?:\$\s*)?(?:run|execute|python3?|node|tsx|ts-node|bash|sh|zsh|pytest|ruby|go\s+run)\b|"
+        r"\b(?:run|execute)\s+`[^`]+`|\b(?:python3?|node|tsx|ts-node|bash|sh|pytest)\s+[A-Za-z0-9_.-]+)",
+        re.IGNORECASE,
+    )
+    root_or_other_ctx_re = re.compile(
+        r"(?:\bin\s+the\s+root\b|\broot\s+folder\b|\brepo(?:sitory)?\s+root\b|"
+        r"\bother\s+(?:\w+\s+)?examples?\b|\banother\s+example\b)",
         re.IGNORECASE,
     )
 
@@ -615,17 +641,36 @@ def audit_repository(
             continue
 
         active_cwd: Path = doc_path.parent
+        explicit_cd: bool = False
+        in_fence: bool = False
         package_context_active: bool = False
+        tutorial_created_files: Set[str] = set()
+        recent_tutorial_lines: int = 0
 
         for idx, line in enumerate(lines, start=1):
             stripped = line.strip()
             if not stripped:
                 continue
 
-            # Reset active_cwd on top-level/second-level Markdown headings
-            if stripped.startswith(("# ", "## ")):
+            if recent_tutorial_lines > 0:
+                recent_tutorial_lines -= 1
+
+            if stripped.startswith("```"):
+                if in_fence:
+                    in_fence = False
+                    active_cwd = doc_path.parent
+                    explicit_cd = False
+                else:
+                    in_fence = True
+
+            # Reset active_cwd on Markdown headings or when explicitly switching back to root/other example
+            if stripped.startswith("#") or root_or_other_ctx_re.search(line):
                 active_cwd = doc_path.parent
-                package_context_active = bool(pkg_dir_hint_re.search(stripped))
+                explicit_cd = False
+                if stripped.startswith("#"):
+                    package_context_active = bool(pkg_dir_hint_re.search(stripped))
+                else:
+                    package_context_active = True
 
             if pkg_dir_hint_re.search(line):
                 package_context_active = True
@@ -639,6 +684,7 @@ def audit_repository(
                     cand_dir = (base_cand / cd_arg).resolve()
                     if cand_dir.is_dir() and cand_dir.is_relative_to(root):
                         active_cwd = cand_dir
+                        explicit_cd = active_cwd.resolve() != doc_path.parent.resolve()
                         break
 
             # 1. Check npm / pnpm / yarn / bun script references against active_cwd or root package.json
@@ -647,15 +693,17 @@ def audit_repository(
                 for m_npm in NPM_SCRIPT_RE.finditer(line):
                     script_matches.append(m_npm.group("script"))
                 for m_yarn in YARN_SHORT_SCRIPT_RE.finditer(line):
-                    script_matches.append(m_yarn.group("script"))
+                    scr_val = m_yarn.group("script") or m_yarn.group("script2")
+                    if scr_val:
+                        script_matches.append(scr_val)
                 for scr in script_matches:
                     total_references_checked += 1
                     cwd_pkg = active_cwd / "package.json"
                     cwd_scripts = (_get_sigs(cwd_pkg).get("symbols") or {}) if cwd_pkg.is_file() else {}
                     found_in_cwd = scr in cwd_scripts
-                    found_in_root = pkg_scripts is not None and scr in pkg_scripts
+                    found_in_root = (not explicit_cd) and (pkg_scripts is not None and scr in pkg_scripts)
                     found_in_ws = False
-                    if not found_in_cwd and not found_in_root and package_context_active and workspace_pkg_scripts:
+                    if not explicit_cd and not found_in_cwd and not found_in_root and package_context_active and workspace_pkg_scripts:
                         found_in_ws = any(scr in ws_s for ws_s in workspace_pkg_scripts.values())
                     if not (found_in_cwd or found_in_root or found_in_ws):
                         target_pkg_rel = (
@@ -663,7 +711,7 @@ def audit_repository(
                             if cwd_pkg.is_file() and cwd_pkg.is_relative_to(root)
                             else "package.json"
                         )
-                        avail_keys = sorted((cwd_scripts or pkg_scripts or {}).keys())[:8]
+                        avail_keys = sorted((cwd_scripts if explicit_cd else (cwd_scripts or pkg_scripts or {})).keys())[:8]
                         _add_finding(
                             rule_id="missing_script",
                             severity="error",
@@ -694,24 +742,40 @@ def audit_repository(
                             remediation=f"`Makefile`의 정의된 타겟({sorted(make_targets.keys())[:8]})과 문서 명령을 동기화하세요.",
                         )
 
+            # Skip file reference extraction on Markdown reference-link definitions, code fence title headers, prohibitive/anti-pattern lines, or explicit external-repo lines
+            if (
+                ref_link_def_re.match(line)
+                or code_fence_title_re.match(line)
+                or prohibitive_line_re.search(line)
+                or external_repo_re.search(line)
+            ):
+                continue
+
+            is_tutorial_create_line = bool(tutorial_create_re.search(line))
+            if is_tutorial_create_line:
+                recent_tutorial_lines = 4
+
+            # Strip Markdown reference-style link keys `[label][ref_id]` so `ref_id` is not misparsed as a local path
+            line_for_paths = re.sub(r"(\[[^\]]+\])\[[^\]]+\]", r"\1", line)
+
             # 3. Extract file & explicit symbol references on this line
             line_refs: List[Tuple[str, Optional[str]]] = []
-            for m_exp in EXPLICIT_ANCHOR_RE.finditer(line):
+            for m_exp in EXPLICIT_ANCHOR_RE.finditer(line_for_paths):
                 sym = m_exp.group("symbol")
                 if sym and re.match(r"^L\d+", sym):
                     sym = None
                 line_refs.append((m_exp.group("path"), sym))
-            for m_bt in BACKTICK_FILE_RE.finditer(line):
+            for m_bt in BACKTICK_FILE_RE.finditer(line_for_paths):
                 sym = m_bt.group("symbol")
                 if sym and re.match(r"^L\d+", sym):
                     sym = None
                 line_refs.append((m_bt.group("path"), sym))
-            for m_md in MD_LINK_FILE_RE.finditer(line):
+            for m_md in MD_LINK_FILE_RE.finditer(line_for_paths):
                 sym = m_md.group("anchor")
                 if sym and re.match(r"^L\d+", sym):
                     sym = None
                 line_refs.append((m_md.group("path"), sym))
-            for m_sl in SLASH_PATH_RE.finditer(line):
+            for m_sl in SLASH_PATH_RE.finditer(line_for_paths):
                 line_refs.append((m_sl.group("path"), m_sl.group(2)))
 
             seen_line_paths: Set[Tuple[str, Optional[str]]] = set()
@@ -722,6 +786,11 @@ def audit_repository(
                     clean_p = clean_p[2:]
                 clean_p = clean_p.lstrip("/")
                 if not clean_p or (exp_sym is None and clean_p.lower() in IGNORED_FILE_TOKENS):
+                    continue
+                if is_tutorial_create_line:
+                    tutorial_created_files.add(clean_p)
+                    continue
+                if clean_p in tutorial_created_files:
                     continue
                 if clean_p.lower().endswith((".md", ".mdx", ".rst", ".txt", ".html", ".htm")):
                     # Markdown section heading anchors (#section-name) are not code symbol anchors
@@ -759,6 +828,8 @@ def audit_repository(
                     or "/path/" in lower_p
                     or "my_provider/" in lower_p
                     or "my_block" in lower_p
+                    or "/__generated__/" in lower_p
+                    or lower_p.startswith("__generated__/")
                     or "2025-06-15-" in lower_p
                     or lower_p in ("src/config/database.ts", "src/db/client.ts")
                     or lower_p.endswith(("/foo.py", "/test_foo.py", "/bar.py", "/example.py", "/example.ts"))
@@ -772,28 +843,38 @@ def audit_repository(
 
                 # Resolve relative to active_cwd (from `cd <subdir>`), repo root, doc parent, .github/workflows, or monorepo subpaths
                 candidate = active_cwd / clean_p
-                if not candidate.is_file() and (root / clean_p).is_file():
-                    candidate = root / clean_p
-                if not candidate.is_file() and (doc_path.parent / clean_p).is_file():
-                    candidate = doc_path.parent / clean_p
-                if not candidate.is_file() and "/" not in clean_p and clean_p.endswith((".yml", ".yaml")):
-                    wf_cand = root / ".github" / "workflows" / clean_p
-                    if wf_cand.is_file():
-                        candidate = wf_cand
-                if not candidate.is_file():
-                    if "/" in clean_p:
-                        suffix_match = "/" + clean_p.lstrip("/")
-                        for rel_s, p_full in all_rel_paths:
-                            if rel_s == clean_p or rel_s.endswith(suffix_match):
-                                candidate = p_full
-                                break
-                    elif clean_p in by_basename and exp_sym is None:
-                        candidate = by_basename[clean_p][0]
+                if not explicit_cd:
+                    if not candidate.is_file() and (root / clean_p).is_file():
+                        candidate = root / clean_p
+                    if not candidate.is_file() and (doc_path.parent / clean_p).is_file():
+                        candidate = doc_path.parent / clean_p
+                    if not candidate.is_file() and "/" not in clean_p and clean_p.endswith((".yml", ".yaml")):
+                        wf_cand = root / ".github" / "workflows" / clean_p
+                        if wf_cand.is_file():
+                            candidate = wf_cand
+                    if not candidate.is_file():
+                        if "/" in clean_p:
+                            suffix_match = "/" + clean_p.lstrip("/")
+                            for rel_s, p_full in all_rel_paths:
+                                if rel_s == clean_p or rel_s.endswith(suffix_match):
+                                    candidate = p_full
+                                    break
+                        elif clean_p in by_basename and exp_sym is None:
+                            candidate = by_basename[clean_p][0]
+                else:
+                    if not candidate.is_file() and (root / clean_p).is_file():
+                        try:
+                            rel_cwd = str(active_cwd.resolve().relative_to(root)).replace("\\", "/")
+                            if clean_p.startswith(rel_cwd + "/"):
+                                candidate = root / clean_p
+                        except ValueError:
+                            pass
 
                 if not candidate.exists() or not candidate.is_file():
-                    # Ignore bare filenames without directory prefix when no symbol anchor is attached
+                    # Ignore bare filenames without directory prefix unless an explicit symbol anchor or execution verb on a code file is present
                     if exp_sym is None and "/" not in clean_p:
-                        continue
+                        if raw_p.strip().startswith("./") or not clean_p.endswith((".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")) or not run_bare_re.search(line):
+                            continue
                     _add_finding(
                         rule_id="missing_path",
                         severity="error",
@@ -1032,9 +1113,12 @@ def audit_repository(
         "exitCode": 0 if error_count == 0 else 1,
         "repoPath": str(root),
         "scannedDocsCount": len(docs),
+        "scannedInstructionFiles": len(docs),
         "scannedDocs": [str(p.relative_to(root)) for p in docs],
         "referencesChecked": total_references_checked,
+        "totalReferencesChecked": total_references_checked,
         "findingsCount": len(findings),
+        "findingCount": len(findings),
         "errorCount": error_count,
         "warningCount": warning_count,
         "countsByRule": by_rule,

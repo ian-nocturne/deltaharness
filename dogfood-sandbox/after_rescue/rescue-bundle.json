@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "exitCode": 0,
+  "readiness": "STATIC_CHECKS_PASSED",
+  "bundleId": "rescue-52304907cd40",
+  "repoName": "dogfood-sandbox",
+  "repoPath": "<workspace>/dogfood-sandbox",
+  "scannedCodeFiles": 2,
+  "scannedSqlFiles": 1,
+  "elapsedMs": 52.78,
+  "secretSafety": {
+    "rawEnvValuesIncluded": false,
+    "redactionPolicy": "recursive_token_and_env_key_only_scrub",
+    "verifiedOutputClean": true,
+    "scopeNote": "Local .env values are never included, and known API token patterns in paths/messages are scrubbed."
+  },
+  "stack": {
+    "languages": [
+      "Unknown"
+    ],
+    "frameworks": [],
+    "database": [],
+    "npmScripts": []
+  },
+  "git": {
+    "isGitRepo": false,
+    "branch": null,
+    "headSha": null,
+    "dirtyFileCount": 0,
+    "modifiedFiles": []
+  },
+  "deployConfigs": [],
+  "presentLockfiles": [
+    "package-lock.json"
+  ],
+  "envAudit": {
+    "envFilesDetected": [
+      ".env.local",
+      ".env.example"
+    ],
+    "requiredKeys": [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET"
+    ],
+    "activeSetKeyCount": 3,
+    "missingOrEmptyKeys": [],
+    "unverifiedKeys": []
+  },
+  "summary": {
+    "readiness": "STATIC_CHECKS_PASSED",
+    "estimatedComplexity": "NONE",
+    "totalBlockers": 0,
+    "criticalCount": 0,
+    "warningCount": 0
+  },
+  "blockers": []
+}

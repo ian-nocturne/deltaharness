@@ -300,8 +300,8 @@ def _extract_brace_block(src_text: str, open_brace_idx: int) -> str:
     return src_text[open_brace_idx:]
 
 
-def _blank_js_comments_preserve_lines(text: str) -> Tuple[str, bool]:
-    """Replace JS/TS block and line comments with spaces (preserving newlines) and check syntax balance."""
+def _blank_js_comments_preserve_lines(text: str, *, blank_strings: bool = False) -> Tuple[str, bool]:
+    """Replace JS/TS comments (and optionally string/template/regex interiors) with spaces (preserving newlines) and check syntax balance."""
     out: list[str] = []
     n = len(text)
     i = 0
@@ -314,6 +314,7 @@ def _blank_js_comments_preserve_lines(text: str) -> Tuple[str, bool]:
     pairs = {")": "(", "}": "{", "]": "["}
     syntax_ok = True
     last_non_ws = ""
+    last_word = ""
 
     while i < n:
         ch = text[i]
@@ -339,36 +340,47 @@ def _blank_js_comments_preserve_lines(text: str) -> Tuple[str, bool]:
             continue
 
         if in_regex:
-            out.append(ch)
             if ch == "\\" and i + 1 < n:
-                out.append(text[i + 1])
+                out.append("  " if blank_strings else text[i:i + 2])
                 i += 2
                 continue
             if ch == "\n":
+                # Unterminated regex literal at newline is a JS/TS syntax error
+                syntax_ok = False
                 in_regex = False
                 in_regex_class = False
+                out.append("\n")
             elif ch == "[" and not in_regex_class:
                 in_regex_class = True
+                out.append(" " if blank_strings else ch)
             elif ch == "]" and in_regex_class:
                 in_regex_class = False
+                out.append(" " if blank_strings else ch)
             elif ch == "/" and not in_regex_class:
                 in_regex = False
                 last_non_ws = "/"
+                out.append("/")
+            else:
+                out.append(" " if blank_strings else ch)
             i += 1
             continue
 
         if in_str is not None:
-            out.append(ch)
             if ch == "\\" and i + 1 < n:
-                out.append(text[i + 1])
+                out.append("  " if blank_strings else text[i:i + 2])
                 i += 2
                 continue
-            if ch == "\n" and in_str in ("'", '"'):
-                syntax_ok = False
-                in_str = None
+            if ch == "\n":
+                if in_str in ("'", '"'):
+                    syntax_ok = False
+                    in_str = None
+                out.append("\n")
             elif ch == in_str:
+                out.append(ch)
                 in_str = None
                 last_non_ws = ch
+            else:
+                out.append(" " if blank_strings else ch)
             i += 1
             continue
 
@@ -384,14 +396,19 @@ def _blank_js_comments_preserve_lines(text: str) -> Tuple[str, bool]:
             i += 2
             continue
 
+        # Regex literal start (never after `<` or `>` or before `>` which is JSX `/>`)
         if (
             ch == "/"
-            and nxt not in ("/", "*", "=", " ", "\t", "\n", "\r", "")
-            and (not last_non_ws or last_non_ws in "=(,:[!&|?{};~+-*%^<>")
+            and nxt not in ("/", "*", "=", ">", " ", "\t", "\n", "\r", "")
+            and (
+                not last_non_ws
+                or last_non_ws in "=(,:[!&|?{;~+-*%^"
+                or last_word in ("return", "case", "throw", "delete", "void", "typeof", "yield", "await")
+            )
         ):
             in_regex = True
             in_regex_class = False
-            out.append(ch)
+            out.append("/")
             i += 1
             continue
 
@@ -409,19 +426,36 @@ def _blank_js_comments_preserve_lines(text: str) -> Tuple[str, bool]:
             else:
                 stack.pop()
 
+        if ch.isalpha() or ch in ("_", "$"):
+            # Track identifier words for `return /regex/`
+            j = i
+            while j < n and (text[j].isalnum() or text[j] in ("_", "$")):
+                j += 1
+            last_word = text[i:j]
+            last_non_ws = text[j - 1]
+            out.append(text[i:j])
+            i = j
+            continue
+
         if not ch.isspace():
             last_non_ws = ch
+            last_word = ""
         out.append(ch)
         i += 1
 
-    if in_block_comment or in_str is not None or stack:
+    if in_block_comment or in_str is not None or in_regex or stack:
         syntax_ok = False
 
-    return "".join(out), syntax_ok
+    blanked = "".join(out)
+    # Detect empty assignment `const x = ;` or `x = ;`
+    if syntax_ok and re.search(r"(?<![=!<>+\-*/%&|^])=\s*;", blanked):
+        syntax_ok = False
+
+    return blanked, syntax_ok
 
 
 def _strip_js_comments(text: str) -> str:
-    blanked, _ = _blank_js_comments_preserve_lines(text)
+    blanked, _ = _blank_js_comments_preserve_lines(text, blank_strings=False)
     return "\n".join(ln.strip() for ln in blanked.splitlines() if ln.strip())
 
 
@@ -454,7 +488,7 @@ def _build_ts_func_sig(is_async: bool, raw_params: str, body_text: str) -> dict:
 
 def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
     """Extract function, arrow function, HOC wrapper, class, method, interface, and type contracts from TS/JS."""
-    src_text, syntax_ok = _blank_js_comments_preserve_lines(raw_src_text)
+    src_text, syntax_ok = _blank_js_comments_preserve_lines(raw_src_text, blank_strings=True)
     sigs = {}
 
     # 1. Standard function declarations: [export] [default] [async] function Name[<T>](params)
@@ -471,7 +505,7 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
 
     # 2. Arrow function / function expression assignments (supports both `(a, b) =>` and single-identifier `x =>`)
     arrow_pat = re.compile(
-        r"(?m)^[ \t]*(?:export[ \t]+)?(?:const|let|var)[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?::[^=\n]+)?=[ \t]*(async[ \t]+)?(?:<[^>({\n]*>[ \t]*)?(?:\(([^)]*)\)|([A-Za-z_$][A-Za-z0-9_$]*))[ \t]*(?::[^=\n>]+)?=>"
+        r"(?m)^[ \t]*(?:export[ \t]+)?(?:const|let|var)[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?::[^=\n]+)?=\s*(async[ \t]+)?(?:<[^>({\n]*>\s*)?(?:\(([^)]*)\)|([A-Za-z_$][A-Za-z0-9_$]*))\s*(?::[^=\n>]+)?=>"
     )
     for m in arrow_pat.finditer(src_text):
         name = m.group(1)
@@ -485,11 +519,11 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
             body_block = rest.splitlines()[0] if rest else m.group(0)
         sigs[name] = _build_ts_func_sig(is_async, raw_params, body_block)
 
-    # 2b. React HOC wrappers: memo(function App(...) {}), React.memo(...), forwardRef(...)
+    # 2b. React / generic HOC wrappers (supports single or nested `memo(forwardRef(...))`, `withAuth(...)`, multiline)
     hoc_pat = re.compile(
-        r"(?m)^[ \t]*(?:export[ \t]+)?(?:default[ \t]+)?(?:(?:const|let|var)[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?::[^=\n]+)?=[ \t]*)?"
-        r"(?:React\.)?(?:memo|forwardRef)[ \t]*(?:<[^>(\n]*>)?[ \t]*\([ \t]*"
-        r"(?:(async[ \t]+)?function(?:[ \t]+([A-Za-z_$][A-Za-z0-9_$]*))?[ \t]*\(([^)]*)\)|(async[ \t]+)?(?:\(([^)]*)\)|([A-Za-z_$][A-Za-z0-9_$]*))[ \t]*=>)"
+        r"(?m)^[ \t]*(?:export[ \t]+)?(?:default[ \t]+)?(?:(?:const|let|var)[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?::[^=\n]+)?=\s*)?"
+        r"(?:[A-Za-z_$][A-Za-z0-9_$.]*\s*(?:<[^>(\n]*>)?\s*\(\s*)+"
+        r"(?:(async[ \t]+)?function(?:[ \t]+([A-Za-z_$][A-Za-z0-9_$]*))?\s*\(([^)]*)\)|(async[ \t]+)?(?:\(([^)]*)\)|([A-Za-z_$][A-Za-z0-9_$]*))\s*=>)"
     )
     for m in hoc_pat.finditer(src_text):
         var_name = m.group(1)

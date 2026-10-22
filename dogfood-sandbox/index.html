@@ -1,0 +1,3547 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>MCR Studio v5.0 — 미디어 컨트롤 타워</title>
+  <style>
+    :root {
+      --bg-base: #0b0c10;
+      --bg-surface: #12141c;
+      --bg-surface-elevated: #171a26;
+      --border-subtle: #1f2433;
+      --border-strong: #2e354a;
+      --accent-cyan: #00d2ff;
+      --accent-purple: #9d4edd;
+      --accent-amber: #f59e0b;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --text-main: #eceef4;
+      --text-muted: #8e95aa;
+      --text-dim: #5c6377;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background: var(--bg-base);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Header Bar (Responsive) */
+    .top-header {
+      height: 56px;
+      flex-shrink: 0;
+      background: #0e1017;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 1000;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .studio-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.04em;
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse-dot 2s infinite ease-in-out;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .header-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.12);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Global View Mode Switcher */
+    .viewmode-toggle {
+      display: flex;
+      background: #171a26;
+      border: 1px solid var(--border-strong);
+      border-radius: 24px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .vm-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .vm-btn:hover {
+      color: #fff;
+    }
+
+    .vm-btn.active {
+      background: #252b3d;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+
+    body[data-view-mode="reader"] .vm-btn[data-view-mode="reader"] {
+      background: #00d2ff;
+      color: #0b0c10;
+    }
+
+    body[data-view-mode="agent"] .vm-btn[data-view-mode="agent"] {
+      background: #9d4edd;
+      color: #ffffff;
+    }
+
+    /* Main Workspace Layout */
+    .workspace-layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Left Sidebar Rail */
+    .sidebar-rail {
+      background: #0f1118;
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px 10px;
+      user-select: none;
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      text-align: left;
+    }
+
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: #fff;
+    }
+
+    .nav-item.active {
+      background: #1b202e;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .nav-item-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .nav-icon {
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    .nav-label {
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .nav-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 10px;
+      background: var(--surface-subtle);
+      color: var(--text-secondary);
+    }
+
+    .nav-badge.h3 {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .sidebar-footer {
+      padding: 12px 10px 4px;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .footer-stat {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .footer-stat strong {
+      color: var(--accent-green);
+    }
+
+    .footer-stat strong.amber {
+      color: var(--accent-amber);
+    }
+
+    .shortcut-hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #4b5266;
+    }
+
+    /* Main Canvas */
+    .main-canvas {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+      min-height: 0;
+      background: var(--bg-base);
+    }
+
+    .main-canvas::-webkit-scrollbar {
+      width: 7px;
+    }
+    .main-canvas::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .main-canvas::-webkit-scrollbar-thumb {
+      background: #1e2433;
+      border-radius: 4px;
+    }
+
+    /* Studio Panels (Tab Switching) */
+    .studio-panel {
+      display: none;
+      animation: fadeIn 0.15s ease-out;
+    }
+
+    .studio-panel.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Common Panel Headers */
+    .panel-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .filter-btn:hover {
+      color: #fff;
+      border-color: var(--border-strong);
+    }
+
+    .filter-btn.active {
+      background: #23293a;
+      color: #fff;
+      border-color: var(--accent-cyan);
+    }
+
+    /* =========================================================
+       PANEL 1: 6-CHANNEL CCTV MULTIVIEW
+       ========================================================= */
+    .cctv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 18px;
+    }
+
+    .cctv-monitor {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .cctv-monitor.gate-h3 {
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+
+    .cctv-bezel {
+      background: #0f1118;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .ch-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 12px;
+    }
+
+    .status-badge.h3 {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .status-badge.prod {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .cctv-screen {
+      background: #06070a;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .cctv-screen video {
+      width: 100%;
+      max-height: 290px;
+      border-radius: var(--radius-sm);
+      background: #000;
+    }
+
+    .cover-pair-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .cover-pair-row img {
+      height: 210px;
+      width: 48%;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .single-preview-img {
+      width: 100%;
+      max-height: 210px;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .audio-audition-bar {
+      width: 100%;
+      margin-top: 8px;
+      padding: 7px 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .audio-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #00d2ff;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .audio-audition-bar audio {
+      width: 100%;
+      height: 32px;
+      outline: none;
+    }
+
+    .cctv-body {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .cctv-item-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.4;
+    }
+
+    .arc-progress {
+      background: #0a0c12;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-size: 11px;
+    }
+
+    .arc-label {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .arc-steps {
+      color: var(--text-dim);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .arc-steps .cur {
+      color: #fbbf24;
+      font-weight: 700;
+    }
+
+    .meta-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      line-height: 1.35;
+    }
+
+    .meta-k {
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .meta-v {
+      color: var(--text-main);
+      text-align: right;
+      font-weight: 600;
+    }
+
+    .cctv-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 8px;
+    }
+
+    .btn-action {
+      flex: 1;
+      background: #1c2130;
+      border: 1px solid var(--border-strong);
+      color: var(--text-main);
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.12s;
+      text-align: center;
+    }
+
+    .btn-action:hover {
+      background: #272f44;
+      border-color: #3b4666;
+    }
+
+    .btn-action.approve {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+
+    .btn-action.approve:hover {
+      background: rgba(245, 158, 11, 0.28);
+    }
+
+    /* =========================================================
+       PANEL 2: PERFORMANCE & CONDITIONAL NEXT-ACTION MATRIX
+       ========================================================= */
+    .perf-summary-banner {
+      background: linear-gradient(135deg, #101524 0%, #171f33 100%);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+
+    .perf-kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .perf-kpi-chip {
+      background: #090b10;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+
+    .perf-kpi-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .perf-kpi-value {
+      font-size: 16px;
+      font-weight: 800;
+      color: #34d399;
+    }
+
+    .perf-channel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 18px;
+    }
+
+    .perf-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    .perf-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 10px;
+    }
+
+    .perf-card-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .tier-box {
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .tier-box.tier-1 {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+
+    .tier-box.tier-2 {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+
+    .tier-box.tier-3 {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+    }
+
+    .tier-tag {
+      font-weight: 800;
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    .tier-1 .tier-tag { color: #34d399; }
+    .tier-2 .tier-tag { color: #fbbf24; }
+    .tier-3 .tier-tag { color: #f87171; }
+
+    /* =========================================================
+       PANEL 3: ROADMAP & ASSET EXPLORER
+       ========================================================= */
+    .roadmap-timeline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .roadmap-phase-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .roadmap-phase-card.active {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 16px rgba(0, 210, 255, 0.15);
+    }
+
+    .phase-badge {
+      font-size: 11px;
+      font-weight: 800;
+      color: #00d2ff;
+      letter-spacing: 0.05em;
+    }
+
+    .phase-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .phase-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .asset-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .asset-grid-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .asset-grid-card:hover {
+      border-color: var(--accent-cyan);
+      transform: translateY(-2px);
+    }
+
+    .asset-card-thumb-wrap {
+      background: #06070a;
+      height: 160px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .asset-card-thumb-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .asset-card-badge {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    .asset-card-info {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .asset-card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.35;
+    }
+
+    .asset-card-spec {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* =========================================================
+       PANEL 4: SHORTS & GLOBAL 5-LANG AUDITION
+       ========================================================= */
+    .lang-selector-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #131722;
+      border: 1px solid var(--border-strong);
+      border-radius: 24px;
+      padding: 4px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .lang-pill-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .lang-pill-btn.active {
+      background: #252e42;
+      color: #00d2ff;
+      border: 1px solid rgba(0, 210, 255, 0.3);
+    }
+
+    .shorts-studio-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .short-studio-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .short-studio-head {
+      background: #0f1118;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 13px;
+      font-weight: 800;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .short-video-wrap {
+      background: #050608;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .short-video-wrap video {
+      width: 100%;
+      max-height: 420px;
+      aspect-ratio: 9/16;
+      border-radius: var(--radius-sm);
+      background: #000;
+    }
+
+    .short-studio-info {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .script-snippet {
+      background: #0a0c12;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      font-size: 12px;
+      color: #38bdf8;
+      line-height: 1.5;
+    }
+
+    /* =========================================================
+       PANEL 5: NOVEL READER & WITCHER 3 EMBEDDED ILLUSTRATIONS
+       ========================================================= */
+    .novel-control-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .work-selector {
+      display: flex;
+      background: #171a26;
+      border: 1px solid var(--border-strong);
+      border-radius: 24px;
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .work-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .work-btn.active {
+      background: #252b3d;
+      color: #fff;
+    }
+
+    .episode-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .ep-pill {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 18px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .ep-pill.active {
+      background: #00d2ff;
+      color: #0b0c10;
+      font-weight: 800;
+      border-color: #00d2ff;
+    }
+
+    .reader-appearance-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .theme-toggle-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 18px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .font-size-group {
+      display: flex;
+      background: #171a26;
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      padding: 2px;
+    }
+
+    .font-size-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+
+    .font-size-btn.active {
+      background: #252b3d;
+      color: #fff;
+    }
+
+    /* Ridibooks / Munpia 680px Centered Box */
+    .novel-reader-box {
+      max-width: 680px;
+      margin: 0 auto;
+      background: #10121a;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 36px 32px 60px;
+      font-size: 18px;
+      line-height: 1.85;
+      font-family: "KoPubWorldBatang", "Batang", "Gowun Batang", -apple-system, serif;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .novel-reader-box[data-theme="paper"] {
+      background: #f7f3e9;
+      color: #2b2b2b;
+      border-color: #e5ded0;
+    }
+
+    .reader-ep-heading {
+      font-size: 21px;
+      font-weight: 800;
+      text-align: center;
+      margin: 0 0 28px 0;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+      letter-spacing: -0.01em;
+    }
+
+    .novel-reader-box[data-theme="paper"] .reader-ep-heading {
+      border-bottom-color: rgba(0, 0, 0, 0.08);
+      color: #1a1a1a;
+    }
+
+    /* Witcher 3 Style Embedded Illustration Card */
+    .novel-illust-card {
+      background: #090a0f;
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin: 0 0 32px 0;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    }
+
+    .novel-reader-box[data-theme="paper"] .novel-illust-card {
+      background: #eee8d8;
+      border-color: #d8cdb6;
+    }
+
+    .novel-illust-img-wrap {
+      position: relative;
+      width: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .novel-illust-img-wrap img {
+      width: 100%;
+      max-height: 480px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .illust-tag {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: #fbbf24;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-family: -apple-system, sans-serif;
+      letter-spacing: 0.04em;
+    }
+
+    .novel-illust-caption {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", sans-serif;
+    }
+
+    .illust-caption-badge {
+      font-size: 11px;
+      font-weight: 800;
+      color: #fbbf24;
+    }
+
+    .illust-caption-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .novel-reader-box[data-theme="paper"] .illust-caption-desc {
+      color: #555;
+    }
+
+    .novel-episode-content {
+      display: none;
+    }
+
+    .novel-episode-content.active {
+      display: block;
+    }
+
+    .p-narration {
+      margin: 0 0 1.25em 0;
+      word-break: keep-all;
+      text-align: justify;
+    }
+
+    .p-dialogue {
+      margin: 0 0 1.25em 0;
+      word-break: keep-all;
+    }
+
+    .reader-pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .novel-reader-box[data-theme="paper"] .reader-pagination {
+      border-top-color: rgba(0, 0, 0, 0.08);
+    }
+
+    .nav-ep-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: inherit;
+      padding: 7px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .novel-reader-box[data-theme="paper"] .nav-ep-btn {
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    .ep-counter {
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0.7;
+    }
+
+    /* Agent Mode Only Blocks */
+    body[data-view-mode="reader"] .agent-only-block {
+      display: none !important;
+    }
+
+    body[data-view-mode="agent"] .agent-only-block {
+      display: block !important;
+      margin-top: 32px;
+    }
+
+    .agent-suite {
+      background: #11141f;
+      border: 1px solid var(--accent-purple);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      box-shadow: 0 8px 30px rgba(157, 78, 221, 0.12);
+    }
+
+    .agent-suite-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #c084fc;
+      margin: 0 0 16px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .agent-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .agent-card {
+      background: #090b10;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+    }
+
+    .agent-card-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .table-compact {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .table-compact th, .table-compact td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      text-align: left;
+    }
+
+    .table-compact th {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .diff-box {
+      background: #090b10;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .diff-line-del {
+      color: #f87171;
+      text-decoration: line-through;
+    }
+
+    .diff-line-add {
+      color: #34d399;
+      font-weight: 700;
+    }
+
+    /* =========================================================
+       PANEL 6: DIRECTOR DESK & APPROVAL
+       ========================================================= */
+    .funnel-tracker {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .funnel-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .funnel-step.done { color: #34d399; }
+    .funnel-step.current { color: #fbbf24; }
+
+    .funnel-step-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      background: #1e2433;
+    }
+
+    .funnel-step.done .funnel-step-badge {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+    }
+
+    .funnel-step.current .funnel-step-badge {
+      background: rgba(245, 158, 11, 0.25);
+      border: 1px solid #f59e0b;
+      animation: pulse-dot 2s infinite;
+    }
+
+    .funnel-arrow {
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    .director-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .approval-card {
+      background: var(--bg-surface);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .approval-card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fbbf24;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .prompt-builder-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .form-select, .form-input, .form-textarea {
+      background: #090b10;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: #fff;
+      padding: 8px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 60px;
+      font-family: inherit;
+    }
+
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .check-label {
+      font-size: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .generated-prompt-box {
+      background: #07080c;
+      border: 1px solid #232838;
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 12px;
+      color: #38bdf8;
+      line-height: 1.5;
+      min-height: 50px;
+      word-break: break-all;
+    }
+
+    /* Toast Notification */
+    .mcr-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #171b26;
+      border: 1px solid #3b4256;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 24px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.22s ease-out;
+      z-index: 10000;
+      pointer-events: none;
+    }
+
+    .mcr-toast.visible {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Interactive Detail Inspector Modal */
+    .mcr-modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 10001;
+    }
+
+    .mcr-modal-backdrop.visible {
+      display: flex;
+    }
+
+    .mcr-modal-container {
+      background: #12141c;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 680px;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    }
+
+    .mcr-modal-head {
+      background: #0e1017;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mcr-modal-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .mcr-modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .mcr-modal-close:hover {
+      color: #fff;
+    }
+
+    .modal-media-wrap {
+      background: #06070a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .modal-img-preview {
+      max-width: 100%;
+      max-height: 380px;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+    }
+
+    .modal-video-preview {
+      max-width: 100%;
+      max-height: 380px;
+      border-radius: var(--radius-sm);
+    }
+
+    .modal-audio-box, .modal-doc-box {
+      width: 100%;
+      text-align: center;
+      padding: 20px 10px;
+    }
+
+    .mcr-modal-body {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    .modal-meta-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .modal-meta-k {
+      font-weight: 800;
+      color: #00d2ff;
+      font-size: 12px;
+    }
+
+    .modal-meta-v {
+      color: var(--text-main);
+      background: #080a0e;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    /* =========================================================
+       CRITICAL MOBILE RESPONSIVE FIXES (iPhone 390px Viewport)
+       ========================================================= */
+    @media (max-width: 768px) {
+      .top-header {
+        height: auto;
+        min-height: 52px;
+        padding: 8px 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .header-pill {
+        display: none !important;
+      }
+      .studio-logo {
+        font-size: 14px;
+        gap: 6px;
+      }
+      .vm-btn {
+        font-size: 12px;
+        padding: 5px 8px;
+        white-space: nowrap;
+      }
+    }
+
+    @media (max-width: 900px) {
+      html, body {
+        height: auto;
+        overflow: auto;
+      }
+      .workspace-layout {
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+      }
+      /* Bottom Navigation (Fixed 64px Grid) */
+      .sidebar-rail {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 64px;
+        padding: 0 4px;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: rgba(11, 12, 16, 0.96);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-top: 1px solid #232634;
+        border-right: none;
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        z-index: 9999;
+        align-items: center;
+      }
+      .sidebar-nav {
+        display: contents;
+      }
+      .nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 4px 2px;
+        overflow: hidden;
+        border: none;
+        background: transparent;
+        height: 100%;
+        width: 100%;
+      }
+      .nav-item-left {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        width: 100%;
+      }
+      .nav-icon {
+        font-size: 16px;
+        line-height: 1;
+      }
+      .nav-label {
+        font-size: 11px;
+        white-space: nowrap;
+        word-break: keep-all;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+        text-align: center;
+      }
+      .nav-badge {
+        display: none !important;
+      }
+      .sidebar-footer {
+        display: none !important;
+      }
+      .main-canvas {
+        padding: 14px 12px 96px 12px !important;
+        overflow: visible;
+      }
+      .shorts-studio-grid {
+        grid-template-columns: 1fr;
+      }
+      .director-grid {
+        grid-template-columns: 1fr;
+      }
+      .perf-kpi-row {
+        grid-template-columns: 1fr 1fr;
+      }
+      .perf-channel-grid {
+        grid-template-columns: 1fr;
+      }
+      .roadmap-timeline {
+        grid-template-columns: 1fr;
+      }
+      .agent-grid {
+        grid-template-columns: 1fr;
+      }
+      .novel-reader-box {
+        padding: 20px 14px 40px;
+        font-size: 17px;
+      }
+      .novel-control-bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .work-selector, .episode-pills, .reader-appearance-controls {
+        justify-content: center;
+      }
+      .mcr-modal-backdrop {
+        padding: 10px;
+      }
+    }
+  </style>
+</head>
+<body data-view-mode="reader">
+
+  <!-- Top Header Bar -->
+  <header class="top-header">
+    <div class="header-left">
+      <div class="studio-logo">
+        <span class="live-dot"></span>
+        <span>MCR STUDIO v5.0</span>
+      </div>
+      <span class="header-pill">ONLINE · TAILSCALE SECURE</span>
+    </div>
+
+    <div class="header-right">
+      <!-- Global View Mode Switcher -->
+      <div class="viewmode-toggle" id="global-viewmode-toggle">
+        <button class="vm-btn active" data-view-mode="reader"> 독자 뷰</button>
+        <button class="vm-btn" data-view-mode="agent"> 에이전트 뷰</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Layout -->
+  <div class="workspace-layout">
+    <!-- Left Sidebar Rail / Mobile Fixed Bottom Bar -->
+    <aside class="sidebar-rail">
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="panel-multiview">
+          <div class="nav-item-left">
+            <span class="nav-icon"></span>
+            <span class="nav-label">멀티뷰</span>
+          </div>
+          <span class="nav-badge">6</span>
+        </button>
+
+        <button class="nav-item" data-tab="panel-performance">
+          <div class="nav-item-left">
+            <span class="nav-icon"></span>
+            <span class="nav-label">성과·액션</span>
+          </div>
+          <span class="nav-badge">KPI</span>
+        </button>
+
+        <button class="nav-item" data-tab="panel-roadmap">
+          <div class="nav-item-left">
+            <span class="nav-icon">️</span>
+            <span class="nav-label">로드맵·에셋</span>
+          </div>
+          <span class="nav-badge">Map</span>
+        </button>
+
+        <button class="nav-item" data-tab="panel-shorts">
+          <div class="nav-item-left">
+            <span class="nav-icon"></span>
+            <span class="nav-label">쇼츠·글로벌</span>
+          </div>
+          <span class="nav-badge h3">H3</span>
+        </button>
+
+        <button class="nav-item" data-tab="panel-novel">
+          <div class="nav-item-left">
+            <span class="nav-icon"></span>
+            <span class="nav-label">웹소설</span>
+          </div>
+          <span class="nav-badge h3">5화</span>
+        </button>
+
+        <button class="nav-item" data-tab="panel-director">
+          <div class="nav-item-left">
+            <span class="nav-icon">️</span>
+            <span class="nav-label">조타·결재</span>
+          </div>
+          <span class="nav-badge h3">ACT</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="footer-stat">
+          <span>S3 교차 감사</span>
+          <strong>100% 통과</strong>
+        </div>
+        <div class="footer-stat">
+          <span>H3 승인 대기</span>
+          <strong class="amber">3건</strong>
+        </div>
+        <div class="shortcut-hint">단축키: 1~6번 키 탭 전환</div>
+      </div>
+    </aside>
+
+    <!-- Main Canvas -->
+    <main class="main-canvas" id="main-canvas">
+
+      <!-- =========================================================
+           PANEL 1: 6-CHANNEL CCTV MULTIVIEW
+           ========================================================= -->
+      <section class="studio-panel active" id="panel-multiview">
+        <div class="panel-header-bar">
+          <h1 class="panel-title"> 6-채널 CCTV 관제 멀티뷰어 &amp; 라이브 모니터</h1>
+          <div class="filter-pills">
+            <button class="filter-btn active" data-cctv-filter="all">전체 6채널</button>
+            <button class="filter-btn" data-cctv-filter="gate-h3"> H3 승인대기 (3)</button>
+            <button class="filter-btn" data-cctv-filter="video">비디오 4채널</button>
+            <button class="filter-btn" data-cctv-filter="novel">웹소설 2작품</button>
+          </div>
+        </div>
+
+        <div class="cctv-grid">
+          <!-- CH-03: THE STOIC SHADOW -->
+          <article class="cctv-monitor gate-h3" data-tags="gate-h3 video">
+            <div class="cctv-bezel">
+              <span class="ch-title"> CH-03 · THE STOIC SHADOW</span>
+              <span class="status-badge h3">GATE H3 · 완본 컨펌 대기</span>
+            </div>
+            <div class="cctv-screen">
+              <video controls playsinline preload="metadata" poster="./assets/stoic_ep01_v3.png">
+                <source src="./assets/stoic_ep01.mp4" type="video/mp4" />
+              </video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ EP01 성우 음성만 바로 듣기</span>
+                <audio controls preload="metadata" src="./assets/stoic_ep01_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="cctv-body">
+              <div class="cctv-item-title">The Stoic Shadow — 거울의 덫 (35mm 필름 누아르 쇼츠 v3)</div>
+              <div class="arc-progress">
+                <div class="arc-label">
+                  <span>시즌1 큰 그림 진도</span>
+                  <span>Step 3 / 5</span>
+                </div>
+                <div class="arc-steps">
+                  <span>바이블 확립</span>  <span>v1/v2 제작</span>  <span class="cur">● 쇼츠 v3 검수(H3)</span>  <span>유튜브 업로드</span>
+                </div>
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k"> 템플릿</span><span class="meta-v">A24 35mm 필름 누아르 · Cinzel 활판 인화</span></div>
+                <div class="meta-row"><span class="meta-k">️ 사운드</span><span class="meta-v">Hyunsu/Marcus 저음 내레이션 192k</span></div>
+              </div>
+              <div class="cctv-actions">
+                <button class="btn-action" data-nav-to="panel-shorts"> 쇼츠 탭 열기</button>
+                <button class="btn-action approve" data-copy-text="ACT-07(The Stoic Shadow 쇼츠 v3 EP01~02 업로드 및 EP03~04 렌더) 컨펌할게. 바로 실행해줘." data-copy-label="CH-03 승인 명령"> ACT-07 승인 복사</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- CH-04: ANOMALY RULES HORROR -->
+          <article class="cctv-monitor gate-h3" data-tags="gate-h3 video">
+            <div class="cctv-bezel">
+              <span class="ch-title"> CH-04 · ANOMALY RULES HORROR</span>
+              <span class="status-badge h3">GATE H3 · 완본 컨펌 대기</span>
+            </div>
+            <div class="cctv-screen">
+              <video controls playsinline preload="metadata" poster="./assets/anomaly_ep01_v3.png">
+                <source src="./assets/anomaly_ep01.mp4" type="video/mp4" />
+              </video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ 2인 교차 성우(SunHi × Hyunsu) 음성 바로 듣기</span>
+                <audio controls preload="metadata" src="./assets/anomaly_ep01_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="cctv-body">
+              <div class="cctv-item-title">참여형 수칙 괴담 — 별암복원국 제82분실 CORR-98 (쇼츠 v3)</div>
+              <div class="arc-progress">
+                <div class="arc-label">
+                  <span>시즌1 큰 그림 진도</span>
+                  <span>Step 3 / 5</span>
+                </div>
+                <div class="arc-steps">
+                  <span>수칙 모순 설계</span>  <span>키프레임 3종</span>  <span class="cur">● 1호 쇼츠 v3 검수(H3)</span>  <span>고정댓글 수칙 투하</span>
+                </div>
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k"> 템플릿</span><span class="meta-v">1996 VHS 테이프 OSD · Neo둥근모 CRT 인화</span></div>
+                <div class="meta-row"><span class="meta-k">️ 사운드</span><span class="meta-v">라디오 안내방송 × 현장 경고 2인 교차</span></div>
+              </div>
+              <div class="cctv-actions">
+                <button class="btn-action" data-nav-to="panel-shorts"> 쇼츠 탭 열기</button>
+                <button class="btn-action approve" data-copy-text="ACT-08(참여형 수칙 괴담 1호 쇼츠 v3 편성 및 고정댓글 수칙 투하) 컨펌할게. 바로 실행해줘." data-copy-label="CH-04 승인 명령"> ACT-08 승인 복사</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- CH-05: TOWER SECONDHAND SHOP -->
+          <article class="cctv-monitor gate-h3" data-tags="gate-h3 novel">
+            <div class="cctv-bezel">
+              <span class="ch-title"> CH-05 · 탑 안의 유일한 중고상점</span>
+              <span class="status-badge h3">GATE H3 · 1~5화 런칭 대기</span>
+            </div>
+            <div class="cctv-screen">
+              <div class="cover-pair-row">
+                <img src="./assets/towershop_cover_main_cast_kr.jpg" alt="중고상점 주연 시온 한국어 표지" />
+                <img src="./assets/towershop_cover_main_cast_en.jpg" alt="중고상점 영문 마스터 표지" />
+              </div>
+            </div>
+            <div class="cctv-body">
+              <div class="cctv-item-title">《탑 안의 유일한 중고상점》 제1화~제5화 정식 완결 원고</div>
+              <div class="arc-progress">
+                <div class="arc-label">
+                  <span>시즌1 연재 로드맵</span>
+                  <span>Ep.5 / 25</span>
+                </div>
+                <div class="arc-steps">
+                  <span>1화+표지 확정</span>  <span>2~3화 컨펌</span>  <span class="cur">● 4~5화 검수 &amp; 1~5화 런칭(H3)</span>  <span>유료 전환</span>
+                </div>
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">️ Claude 윤문</span><span class="meta-v">KR-27~30 순수 한국어 문체 적용 완료</span></div>
+                <div class="meta-row"><span class="meta-k"> 핵심 떡밥</span><span class="meta-v">F-01~04 회중시계 14분 · 시약병 공명</span></div>
+              </div>
+              <div class="cctv-actions">
+                <button class="btn-action" data-nav-to="panel-novel"> 리더기에서 읽기</button>
+                <button class="btn-action approve" data-copy-text="ACT-06(웹소설 중고상점 & 이단 심문관 4~5화 원고 및 플랫폼 1~5화 정식 런칭) 컨펌할게." data-copy-label="CH-05/06 승인 명령"> ACT-06 승인 복사</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- CH-06: THE HERETIC INQUISITOR -->
+          <article class="cctv-monitor gate-h3" data-tags="gate-h3 novel">
+            <div class="cctv-bezel">
+              <span class="ch-title"> CH-06 · 14층의 이단 심문관</span>
+              <span class="status-badge h3">GATE H3 · 1~5화 런칭 대기</span>
+            </div>
+            <div class="cctv-screen">
+              <div class="cover-pair-row">
+                <img src="./assets/inquisitor_cover_main_cast_kr.jpg" alt="이단 심문관 주연 루칸×이브 한국어 표지" />
+                <img src="./assets/inquisitor_cover_main_cast_en.jpg" alt="이단 심문관 영문 마스터 표지" />
+              </div>
+            </div>
+            <div class="cctv-body">
+              <div class="cctv-item-title">《14층의 이단 심문관 : 업폴》 제1화~제5화 (15+ 다크 로판 AB)</div>
+              <div class="arc-progress">
+                <div class="arc-label">
+                  <span>시즌1 연재 로드맵</span>
+                  <span>Ep.5 / 25</span>
+                </div>
+                <div class="arc-steps">
+                  <span>1화+표지 확정</span>  <span>2~3화 컨펌</span>  <span class="cur">● 4~5화 검수 &amp; 1~5화 런칭(H3)</span>  <span>13층 비밀</span>
+                </div>
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">️ 3사 감사</span><span class="meta-v">관능적 긴장 극대화 · 노골적 묘사 배제 통과</span></div>
+                <div class="meta-row"><span class="meta-k"> 호칭 매트릭스</span><span class="meta-v">심문관 나리 ↔ 루칸 / 사형수 ↔ 이브</span></div>
+              </div>
+              <div class="cctv-actions">
+                <button class="btn-action" data-nav-to="panel-novel"> 리더기에서 읽기</button>
+                <button class="btn-action approve" data-copy-text="ACT-06(웹소설 중고상점 & 이단 심문관 4~5화 원고 및 플랫폼 1~5화 정식 런칭) 컨펌할게." data-copy-label="CH-05/06 승인 명령"> ACT-06 승인 복사</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- CH-01: MC82 CREEPYPASTA (500s GLOBAL 5-LANG SUBTITLE EDITION) -->
+          <article class="cctv-monitor gate-h3" data-tags="gate-h3 video">
+            <div class="cctv-bezel">
+              <span class="ch-title"> CH-01 · MC82 실종사건 82 (500초 글로벌 본편)</span>
+              <span class="status-badge live">v0.4 · 5개국어 단독 자막 컨펌</span>
+            </div>
+            <div class="cctv-screen" style="flex-direction: column;">
+              <video id="vid-mc82-multiview" controls playsinline preload="metadata" poster="./assets/mc82_500s_sub_preview_1.jpg" src="./assets/mc82_v04_en_500s.mp4" style="width:100%; max-height:240px; background:#000;">
+                <track kind="subtitles" srclang="en" label="🇺🇸 English" src="./assets/mc82_v04_en.vtt" default />
+                <track kind="subtitles" srclang="ja" label="🇯🇵 日本語" src="./assets/mc82_v04_ja.vtt" />
+                <track kind="subtitles" srclang="zh" label="🇨🇳 中文" src="./assets/mc82_v04_zh.vtt" />
+                <track kind="subtitles" srclang="pt" label="🇧🇷 Português" src="./assets/mc82_v04_pt.vtt" />
+                <track kind="subtitles" srclang="ko" label="🇰🇷 한국어" src="./assets/mc82_v04_ko.vtt" />
+              </video>
+              <div style="width:100%; background:#0a0d14; border-top:1px solid #1f2433; padding:8px 10px;">
+                <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; align-items:center;">
+                  <span style="font-size:11px; font-weight:800; color:#38bdf8; margin-right:2px;"> 5개국어 단독:</span>
+                  <button class="lang-pill-btn active" data-mc82-lang="en" style="padding:3px 7px; font-size:11px;">🇺🇸 EN</button>
+                  <button class="lang-pill-btn" data-mc82-lang="ja" style="padding:3px 7px; font-size:11px;">🇯🇵 JA</button>
+                  <button class="lang-pill-btn" data-mc82-lang="zh" style="padding:3px 7px; font-size:11px;">🇨🇳 ZH</button>
+                  <button class="lang-pill-btn" data-mc82-lang="pt" style="padding:3px 7px; font-size:11px;">🇧🇷 PT</button>
+                  <button class="lang-pill-btn" data-mc82-lang="ko" style="padding:3px 7px; font-size:11px;">🇰🇷 KO</button>
+                </div>
+                <div id="mc82-live-sub-mv" style="background:#06080d; border:1px solid rgba(0,210,255,0.25); border-radius:6px; padding:7px 9px; min-height:46px;">
+                  <div style="font-size:11px; color:#38bdf8; font-weight:800;">[C10 · 02:01 · EN 단독 자막] ️ 현장 음성 대사 (LIVE VOICE)</div>
+                  <div style="font-size:13px; color:#fef08a; font-weight:800;">️ “Min, open the door. Who's in there?” (Jun over the intercom)</div>
+                </div>
+              </div>
+            </div>
+            <div class="cctv-body">
+              <div class="cctv-item-title">Midnight Channel 82 — 500초(8분 20초) 본편 v0.4 글로벌 5개국어 단독 자막판</div>
+              <div class="arc-progress">
+                <div class="arc-label">
+                  <span>전 구간 글로벌 자막 범위</span>
+                  <span>37 / 37 Scenes + 14 Voice Cues</span>
+                </div>
+                <div class="arc-steps">
+                  <span>C01~C37 기록문</span>  <span>14개 현장 대사</span>  <span class="cur">● 5개국어 단독 번인 MP4 &amp; VTT/SRT 확정</span>
+                </div>
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k"> 제1원칙</span><span class="meta-v">EN · JA · ZH · PT · KO 5개국어 단독 시네마 번인 비디오 즉시 전환</span></div>
+                <div class="meta-row"><span class="meta-k">⏱️ 하이라이트</span><span class="meta-v">02:01 인터폰 / 03:10 본인진술 / 05:39 취소통화 / 06:19 흉터전이</span></div>
+              </div>
+              <div class="cctv-actions">
+                <button class="btn-action" data-nav-to="panel-shorts"> 500초 5개국어 대형 플레이어 열기</button>
+                <button class="btn-action approve" data-mc82-seek="121.2" data-mc82-target="vid-mc82-multiview">▶ 02:01 인터폰 대사 바로 재생</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- CH-02: LOOPPEBBLE -->
+          <article class="cctv-monitor" data-tags="video">
+            <div class="cctv-bezel">
+              <span class="ch-title"> CH-02 · LOOPPEBBLE</span>
+              <span class="status-badge prod">S3 · 4편 묶음 제작 중</span>
+            </div>
+            <div class="cctv-screen" style="min-height: 210px;">
+              <div style="font-size: 32px; margin-bottom: 6px;"></div>
+              <div style="font-weight: 800; color: #fff; font-size: 13px;">글로벌 무대사 슬라임·자갈 촉감 퍼즐</div>
+              <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">Higgsfield Web Unlimited (0 크레딧 제작)</div>
+            </div>
+            <div class="cctv-body">
+              <div class="cctv-item-title">LoopPebble — 스마트TV·숏폼 글로벌 오가닉 번들</div>
+              <div class="arc-progress">
+                <div class="arc-label">
+                  <span>제작 진도</span>
+                  <span>2 / 4 Cuts</span>
+                </div>
+                <div class="arc-steps">
+                  <span>무대사 촉감 R&amp;D</span>  <span class="cur">● 무한 렌더 파이프라인(S3)</span>  <span>IG 예약 배포</span>
+                </div>
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k"> 타겟</span><span class="meta-v">언어 장벽 0% 글로벌 북미·유럽·일본</span></div>
+                <div class="meta-row"><span class="meta-k">️ 상태</span><span class="meta-v">자동 제작 중 (개입 불필요)</span></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           PANEL 2: PERFORMANCE & CONDITIONAL NEXT-ACTION MATRIX
+           ========================================================= -->
+      <section class="studio-panel" id="panel-performance">
+        <div class="panel-header-bar">
+          <h1 class="panel-title"> 채널별 성과 현황 &amp; 조건부 다음 액션 매트릭스</h1>
+        </div>
+
+        <div class="perf-summary-banner">
+          <div style="font-weight: 800; font-size: 15px; color: #fff;">
+             6-채널 공통 KPI 벤치마크 및 3-Tier 조건부 자동 분기 규칙
+          </div>
+          <p style="margin: 6px 0 0 0; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+            초기 24시간 / 72시간 / 7일 성과 데이터에 따라 다음 단계 액션이 자동으로 결정됩니다. 성과가 기준을 초과하면 유료화 및 글로벌 증편을 즉시 개시하고, 중도 이탈 시 훅을 튜닝하며, 장기 미달 시 예비 슬롯으로 피벗합니다.
+          </p>
+
+          <div class="perf-kpi-row">
+            <div class="perf-kpi-chip">
+              <div class="perf-kpi-label">첫 3초 생존율 (Shorts Hook)</div>
+              <div class="perf-kpi-value">≥ 68%</div>
+            </div>
+            <div class="perf-kpi-chip">
+              <div class="perf-kpi-label">쇼츠 완주율 (Completion Rate)</div>
+              <div class="perf-kpi-value">≥ 85%</div>
+            </div>
+            <div class="perf-kpi-chip">
+              <div class="perf-kpi-label">웹소설 1→5화 연독률 (Retention)</div>
+              <div class="perf-kpi-value">≥ 58%</div>
+            </div>
+            <div class="perf-kpi-chip">
+              <div class="perf-kpi-label">글로벌 시청/독자 비중 (Global)</div>
+              <div class="perf-kpi-value">≥ 60%</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="perf-channel-grid">
+          <!-- Card 1: CH-03 Stoic -->
+          <div class="perf-card">
+            <div class="perf-card-head">
+              <span class="perf-card-title">CH-03 · The Stoic Shadow</span>
+              <span class="status-badge h3">ACT-07 Confirmed</span>
+            </div>
+            <div class="meta-list">
+              <div class="meta-row"><span class="meta-k">타겟 플랫폼</span><span class="meta-v">YouTube Shorts, Reels, TikTok (KR+Global 5개국어)</span></div>
+              <div class="meta-row"><span class="meta-k">현재 런칭 상태</span><span class="meta-v">EP01~02 완본 렌더 완료 · H3 컨펌 대기</span></div>
+            </div>
+            <div class="tier-box tier-1">
+              <span class="tier-tag"> Tier 1 (Scale-Up / 3초 생존율 ≥72% 달성 시)</span><br/>
+              일일 5개국어 쇼츠 발행량 2배 증편 + 스토아 심리 플레이북/유료 PDF 런칭 + Reserve 1(고시원 서스펜스) 파생 기획 가동.
+            </div>
+            <div class="tier-box tier-2">
+              <span class="tier-tag"> Tier 2 (Hook Tuning / 3초 생존율 60~68% 시)</span><br/>
+              첫 3초 시청각 훅 A/B 교체 (키아로스쿠로 대비 강화 및 인트로 내레이션 0.5초 당김).
+            </div>
+            <div class="tier-box tier-3">
+              <span class="tier-tag"> Tier 3 (Pivot / 14일 연속 미달 시)</span><br/>
+              즉시 Reserve 1(스마트TV 슬라임/자갈 무대사 쇼츠) 슬롯으로 채널 전환.
+            </div>
+            <button class="btn-action approve" data-copy-text="[CH-03 조건부 액션] Tier 1 성과 달성 확인. 5개국어 쇼츠 발행량 2배 증편 및 유료 플레이북 연계 실행해줘." data-copy-label="CH-03 액션 복사">
+               Tier 1 스케일업 명령 복사
+            </button>
+          </div>
+
+          <!-- Card 2: CH-04 Anomaly -->
+          <div class="perf-card">
+            <div class="perf-card-head">
+              <span class="perf-card-title">CH-04 · Anomaly Rules Horror</span>
+              <span class="status-badge h3">ACT-08 Confirmed</span>
+            </div>
+            <div class="meta-list">
+              <div class="meta-row"><span class="meta-k">타겟 플랫폼</span><span class="meta-v">YouTube Shorts (고정댓글 참여형), TikTok, X</span></div>
+              <div class="meta-row"><span class="meta-k">현재 런칭 상태</span><span class="meta-v">별암복원국 CORR-98 v3 완성 · 고정댓글 수칙 투하 대기</span></div>
+            </div>
+            <div class="tier-box tier-1">
+              <span class="tier-tag"> Tier 1 (Scale-Up / 완주율 ≥88% &amp; 댓글 참여 폭증 시)</span><br/>
+              참여형 수칙 괴담 2~4호 주 3회 연속 편성 + 시청자 투표 기반 멀티 엔딩 웹드라마 파일럿 가동.
+            </div>
+            <div class="tier-box tier-2">
+              <span class="tier-tag"> Tier 2 (Hook Tuning / 초반 15초 이탈 시)</span><br/>
+              VHS 헤드스위칭 지터 강도 조절 및 고정댓글 퀴즈형 수칙 문구 A/B 테스트.
+            </div>
+            <div class="tier-box tier-3">
+              <span class="tier-tag"> Tier 3 (Pivot / 14일 연속 미달 시)</span><br/>
+              Reserve 2(심야 괴담 라디오 아카이브)로 슬롯 전환.
+            </div>
+            <button class="btn-action approve" data-copy-text="[CH-04 조건부 액션] Tier 1 완주율 초과 확인. 주 3회 연속 편성 및 시청자 투표 멀티 엔딩 가동해줘." data-copy-label="CH-04 액션 복사">
+               Tier 1 스케일업 명령 복사
+            </button>
+          </div>
+
+          <!-- Card 3: CH-05 Tower Shop -->
+          <div class="perf-card">
+            <div class="perf-card-head">
+              <span class="perf-card-title">CH-05 · 탑 안의 유일한 중고상점</span>
+              <span class="status-badge h3">ACT-06 Confirmed</span>
+            </div>
+            <div class="meta-list">
+              <div class="meta-row"><span class="meta-k">타겟 플랫폼</span><span class="meta-v">문피아, 네이버시리즈, 조아라, 포스타입</span></div>
+              <div class="meta-row"><span class="meta-k">현재 런칭 상태</span><span class="meta-v">1~5화 클린 완결 원고 + 위쳐3풍 삽화 5종 탑재</span></div>
+            </div>
+            <div class="tier-box tier-1">
+              <span class="tier-tag"> Tier 1 (Scale-Up / 1→5화 연독률 ≥60% 달성 시)</span><br/>
+              포스타입 주석본(1,200원) 및 아이템 도감 즉시 유료 전환 + 6~15화 초안 집필 착수 + 웹툰 마이크로 티저 렌더.
+            </div>
+            <div class="tier-box tier-2">
+              <span class="tier-tag"> Tier 2 (Retention Tuning / 3화 이탈 감지 시)</span><br/>
+              제3화 백유라 첫 대면 씬의 텐션 대화 재배치 및 클리프행어 삽화 위치 전진 배치.
+            </div>
+            <div class="tier-box tier-3">
+              <span class="tier-tag"> Tier 3 (Pivot / 14일 연속 미달 시)</span><br/>
+              단독 연재 중단 후 14층 이단 심문관과의 크로스오버 조기 통합.
+            </div>
+            <button class="btn-action approve" data-copy-text="[CH-05 조건부 액션] Tier 1 연독률 달성 확인. 포스타입 1,200원 주석본 해금 및 6~15화 확장 연재 착수해줘." data-copy-label="CH-05 액션 복사">
+               Tier 1 유료화 해금 복사
+            </button>
+          </div>
+
+          <!-- Card 4: CH-06 Inquisitor -->
+          <div class="perf-card">
+            <div class="perf-card-head">
+              <span class="perf-card-title">CH-06 · 14층의 이단 심문관 : 업폴</span>
+              <span class="status-badge h3">ACT-06 Confirmed</span>
+            </div>
+            <div class="meta-list">
+              <div class="meta-row"><span class="meta-k">타겟 플랫폼</span><span class="meta-v">카카오페이지, 리디북스, 포스타입</span></div>
+              <div class="meta-row"><span class="meta-k">현재 런칭 상태</span><span class="meta-v">15+ 다크 로판 1~5화 완결 + 위쳐3풍 고딕 삽화 탑재</span></div>
+            </div>
+            <div class="tier-box tier-1">
+              <span class="tier-tag"> Tier 1 (Scale-Up / 1→5화 연독률 ≥62% 달성 시)</span><br/>
+              카카오페이지 주간 연재 편성 확정 + 영문(Tapas/Radish) 공식 번역 런칭 + e-북 단행본 선출간.
+            </div>
+            <div class="tier-box tier-2">
+              <span class="tier-tag"> Tier 2 (Tension Tuning / 독자 감정선 정체 시)</span><br/>
+              루칸과 이브의 호칭 매트릭스 텐션(심문관 나리 ↔ 루칸) 밀착 구간 강화.
+            </div>
+            <div class="tier-box tier-3">
+              <span class="tier-tag"> Tier 3 (Pivot / 14일 연속 미달 시)</span><br/>
+              전통 로맨스 비중 축소 후 고딕 미스터리 수사물로 서사 전개 전환.
+            </div>
+            <button class="btn-action approve" data-copy-text="[CH-06 조건부 액션] Tier 1 달성 확인. 영문 Tapas 번역 런칭 및 카카오페이지 정기 연재 일정 확정해줘." data-copy-label="CH-06 액션 복사">
+               Tier 1 글로벌 확장 복사
+            </button>
+          </div>
+
+          <!-- Card 5: CH-01 MC82 -->
+          <div class="perf-card">
+            <div class="perf-card-head">
+              <span class="perf-card-title">CH-01 · Midnight Channel 82</span>
+              <span class="status-badge prod">S3 Production</span>
+            </div>
+            <div class="meta-list">
+              <div class="meta-row"><span class="meta-k">타겟 플랫폼</span><span class="meta-v">YouTube 본편(500초), Shorts, TikTok, 포스타입</span></div>
+              <div class="meta-row"><span class="meta-k">현재 런칭 상태</span><span class="meta-v">컷 33/37 보강 중 · 무개입 S3 자동화 가동</span></div>
+            </div>
+            <div class="tier-box tier-1">
+              <span class="tier-tag"> Tier 1 (Scale-Up / 본편 완주율 ≥45% 달성 시)</span><br/>
+              포스타입 1,200원 심층 사건 일지 주석본 판매 개시 + 시즌2 미제 사건 83 기획 착수.
+            </div>
+            <div class="tier-box tier-2">
+              <span class="tier-tag"> Tier 2 (Retention Tuning / 초반 60초 이탈 시)</span><br/>
+              초반 인트로 쇼츠 컷 3종을 유튜브 쇼츠 피드로 우선 투하하여 시청자 펀넬 유입 재구축.
+            </div>
+            <div class="tier-box tier-3">
+              <span class="tier-tag"> Tier 3 (Pivot / 목표 미달 시)</span><br/>
+              롱폼 단독 배포 중단 후 쇼츠 옴니버스 시리즈로 전환.
+            </div>
+            <button class="btn-action approve" data-copy-text="[CH-01 조건부 액션] Tier 1 달성 확인. 포스타입 1,200원 사건 일지 판매 개시해줘." data-copy-label="CH-01 액션 복사">
+               Tier 1 주석본 판매 복사
+            </button>
+          </div>
+
+          <!-- Card 6: CH-02 LoopPebble -->
+          <div class="perf-card">
+            <div class="perf-card-head">
+              <span class="perf-card-title">CH-02 · LoopPebble</span>
+              <span class="status-badge prod">S3 Unlimited</span>
+            </div>
+            <div class="meta-list">
+              <div class="meta-row"><span class="meta-k">타겟 플랫폼</span><span class="meta-v">스마트TV 앱, YouTube Shorts, Reels (글로벌 전역)</span></div>
+              <div class="meta-row"><span class="meta-k">현재 런칭 상태</span><span class="meta-v">Higgsfield 무한 렌더 가동 중 (0 크레딧 소모)</span></div>
+            </div>
+            <div class="tier-box tier-1">
+              <span class="tier-tag"> Tier 1 (Scale-Up / 오가닉 조회수 일 10만 돌파 시)</span><br/>
+              스마트TV 앰비언트 루프 24시간 라이브 스트리밍 채널 개설 + 글로벌 슬라임 앱 제휴.
+            </div>
+            <div class="tier-box tier-2">
+              <span class="tier-tag"> Tier 2 (Loop Tuning / 루프 경계선 인지 시)</span><br/>
+              심리스(Seamless) 루프 프레임 보간 셰이더 적용 및 사운드 ASMR 볼륨 리밸런싱.
+            </div>
+            <div class="tier-box tier-3">
+              <span class="tier-tag"> Tier 3 (Pivot / 반응 부진 시)</span><br/>
+              자갈 텍스처에서 수중 버블 ASMR 촉감으로 소재 피벗.
+            </div>
+            <button class="btn-action approve" data-copy-text="[CH-02 조건부 액션] Tier 1 달성 확인. 스마트TV 24시간 무한 라이브 스트리밍 세팅 실행해줘." data-copy-label="CH-02 액션 복사">
+               Tier 1 라이브 개설 복사
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           PANEL 3: ROADMAP & ASSET EXPLORER
+           ========================================================= -->
+      <section class="studio-panel" id="panel-roadmap">
+        <div class="panel-header-bar">
+          <h1 class="panel-title">️ 전체 콘텐츠 마스터 로드맵 &amp; 필수 에셋 탐색기</h1>
+        </div>
+
+        <!-- Section A: Timeline -->
+        <div style="font-weight: 800; font-size: 14px; margin-bottom: 10px; color: #fff;">
+           콘텐츠 릴리즈 &amp; 유료화 3단계 마스터 로드맵
+        </div>
+        <div class="roadmap-timeline">
+          <div class="roadmap-phase-card active">
+            <span class="phase-badge">PHASE 1 · CURRENT ACTIVE</span>
+            <div class="phase-title">런칭 1~5화 &amp; 쇼츠 v3 5개국어 동시 투하</div>
+            <div class="phase-desc">
+              • 6채널 동시 런칭 및 초기 시드 오디언스 확보<br/>
+              • 웹소설 1~5화 클린 출판 원고 + 위쳐3풍 삽화 10종 릴리즈<br/>
+              • STOIC / ANOMALY 쇼츠 v3 5개국어(KR/EN/JA/ZH/PT) 동시 배포
+            </div>
+          </div>
+          <div class="roadmap-phase-card">
+            <span class="phase-badge">PHASE 2 · UPCOMING</span>
+            <div class="phase-title">6~15화 확장 연재 &amp; 본편 합류 &amp; 유료화</div>
+            <div class="phase-desc">
+              • 웹소설 주 2회 정기 연재 파이프라인 가동<br/>
+              • MC82 500초 본편 정식 릴리즈 및 포스타입 1,200원 주석본 과금<br/>
+              • 쇼츠 주 5회 발행 증편 및 펀넬 유입 극대화
+            </div>
+          </div>
+          <div class="roadmap-phase-card">
+            <span class="phase-badge">PHASE 3 · SCALE-UP</span>
+            <div class="phase-title">14층×중고상점 크로스오버 &amp; 글로벌 유료화</div>
+            <div class="phase-desc">
+              • 공동 세계관 결전 이벤트 (성표와 우산의 14층 조우)<br/>
+              • Royal Road / Tapas 글로벌 영문 유료 연재 개시<br/>
+              • 웹툰 파일럿 제작 및 IP 머천다이징(굿즈/오디오드라마)
+            </div>
+          </div>
+        </div>
+
+        <!-- Section B: Asset Explorer -->
+        <div class="panel-header-bar" style="margin-top: 28px; margin-bottom: 12px;">
+          <div style="font-weight: 800; font-size: 14px; color: #fff;">
+             인터랙티브 필수 에셋 디테일 탐색기 (클릭 시 세부 검증 인스펙터 오픈)
+          </div>
+          <div class="filter-pills">
+            <button class="filter-btn active" data-asset-filter="all">전체 에셋 (27종)</button>
+            <button class="filter-btn" data-asset-filter="covers"> 주연 신작 표지 (4종)</button>
+            <button class="filter-btn" data-asset-filter="illustrations">️ 위쳐3풍 삽화 (10종)</button>
+            <button class="filter-btn" data-asset-filter="videos"> 쇼츠 비디오</button>
+            <button class="filter-btn" data-asset-filter="audios">️ 뉴럴 보이스</button>
+            <button class="filter-btn" data-asset-filter="docs"> 클린 원고</button>
+          </div>
+        </div>
+
+        <div class="asset-grid">
+          <!-- 1. Towershop Cover KR -->
+          <div class="asset-grid-card" data-cat="covers" data-asset-key="towershop-cover-kr">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/towershop_cover_main_cast_kr.jpg" alt="중고상점 한국어 표지" loading="lazy" />
+              <span class="asset-card-badge">신작 표지</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">중고상점 주연 시온 한국어 마스터 표지</div>
+              <div class="asset-card-spec">1600 × 2400 · 문피아/시리즈 규격</div>
+            </div>
+          </div>
+
+          <!-- 2. Towershop Cover EN -->
+          <div class="asset-grid-card" data-cat="covers" data-asset-key="towershop-cover-en">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/towershop_cover_main_cast_en.jpg" alt="중고상점 영문 표지" loading="lazy" />
+              <span class="asset-card-badge">신작 표지</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">The Only Secondhand Shop 영문 표지</div>
+              <div class="asset-card-spec">1600 × 2400 · Royal Road 규격</div>
+            </div>
+          </div>
+
+          <!-- 3. Inquisitor Cover KR -->
+          <div class="asset-grid-card" data-cat="covers" data-asset-key="inquisitor-cover-kr">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/inquisitor_cover_main_cast_kr.jpg" alt="이단 심문관 한국어 표지" loading="lazy" />
+              <span class="asset-card-badge">신작 표지</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">이단 심문관 주연 루칸×이브 한국어 표지</div>
+              <div class="asset-card-spec">1600 × 2400 · 카카오페이지 규격</div>
+            </div>
+          </div>
+
+          <!-- 4. Inquisitor Cover EN -->
+          <div class="asset-grid-card" data-cat="covers" data-asset-key="inquisitor-cover-en">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/inquisitor_cover_main_cast_en.jpg" alt="이단 심문관 영문 표지" loading="lazy" />
+              <span class="asset-card-badge">신작 표지</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">The Fourteenth Stratum Inquisitor 영문 표지</div>
+              <div class="asset-card-spec">1600 × 2400 · Tapas/Radish 규격</div>
+            </div>
+          </div>
+
+          <!-- 5. Shop Illust 1 -->
+          <div class="asset-grid-card" data-cat="illustrations" data-asset-key="shop-ill-1">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/towershop_ep01_illust.jpg" alt="중고상점 1화 삽화" loading="lazy" />
+              <span class="asset-card-badge">위쳐3풍 삽화</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">중고상점 1화: 비가 안쪽으로 내리는 우산</div>
+              <div class="asset-card-spec">1024 × 1024 · 다크 오일 아트</div>
+            </div>
+          </div>
+
+          <!-- 6. Shop Illust 2 -->
+          <div class="asset-grid-card" data-cat="illustrations" data-asset-key="shop-ill-2">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/towershop_ep02_illust.jpg" alt="중고상점 2화 삽화" loading="lazy" />
+              <span class="asset-card-badge">위쳐3풍 삽화</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">중고상점 2화: 3초를 되감는 은회중시계</div>
+              <div class="asset-card-spec">1024 × 1024 · 다크 오일 아트</div>
+            </div>
+          </div>
+
+          <!-- 7. Inq Illust 1 -->
+          <div class="asset-grid-card" data-cat="illustrations" data-asset-key="inq-ill-1">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/inquisitor_ep01_illust.jpg" alt="이단 심문관 1화 삽화" loading="lazy" />
+              <span class="asset-card-badge">위쳐3풍 삽화</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">이단 심문관 1화: 거꾸로 내리는 비와 처형인</div>
+              <div class="asset-card-spec">1024 × 1024 · 다크 고딕 아트</div>
+            </div>
+          </div>
+
+          <!-- 8. Inq Illust 2 -->
+          <div class="asset-grid-card" data-cat="illustrations" data-asset-key="inq-ill-2">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/inquisitor_ep02_illust.jpg" alt="이단 심문관 2화 삽화" loading="lazy" />
+              <span class="asset-card-badge">위쳐3풍 삽화</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">이단 심문관 2화: 검은 백합의 첫 번째 꽃잎</div>
+              <div class="asset-card-spec">1024 × 1024 · 다크 고딕 아트</div>
+            </div>
+          </div>
+
+          <!-- 9. Video Stoic 1 -->
+          <div class="asset-grid-card" data-cat="videos" data-asset-key="vid-stoic-1">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/stoic_ep01_v3.png" alt="STOIC 1화 쇼츠" loading="lazy" />
+              <span class="asset-card-badge">쇼츠 v3</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">STOIC-EP01 · 거울의 덫 (35mm 누아르)</div>
+              <div class="asset-card-spec">1080 × 1920 (9:16 UHD MP4)</div>
+            </div>
+          </div>
+
+          <!-- 10. Video Anomaly 1 -->
+          <div class="asset-grid-card" data-cat="videos" data-asset-key="vid-anomaly-1">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/anomaly_ep01_v3.png" alt="수칙 괴담 쇼츠" loading="lazy" />
+              <span class="asset-card-badge">쇼츠 v3</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">ANOMALY-EP01 · 별암복원국 CORR-98</div>
+              <div class="asset-card-spec">1080 × 1920 (9:16 UHD MP4)</div>
+            </div>
+          </div>
+
+          <!-- 11. Audio Stoic 1 -->
+          <div class="asset-grid-card" data-cat="audios" data-asset-key="aud-stoic-1">
+            <div class="asset-card-thumb-wrap" style="background:#151824;">
+              <div style="font-size:40px;">️</div>
+              <span class="asset-card-badge">뉴럴 보이스</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">STOIC-EP01 성우 음성 (192kbps MP3)</div>
+              <div class="asset-card-spec">Hyunsu/Marcus · 48kHz Stereo</div>
+            </div>
+          </div>
+
+          <!-- 12. Doc Shop Clean -->
+          <div class="asset-grid-card" data-cat="docs" data-asset-key="doc-shop-clean">
+            <div class="asset-card-thumb-wrap" style="background:#151824;">
+              <div style="font-size:40px;"></div>
+              <span class="asset-card-badge">클린 원고</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">중고상점 1~5화 클린 출판 원고</div>
+              <div class="asset-card-spec">KR-27~30 순수 산문 (태그 0건)</div>
+            </div>
+          </div>
+
+          <!-- 13. MC82 500s Global 5-Lang Master -->
+          <div class="asset-grid-card" data-cat="videos" data-asset-key="vid-mc82-global">
+            <div class="asset-card-thumb-wrap">
+              <img src="./assets/mc82_500s_sub_preview_1.jpg" alt="MC82 500초 글로벌 자막 본편" loading="lazy" />
+              <span class="asset-card-badge">500초 글로벌 본편</span>
+            </div>
+            <div class="asset-card-info">
+              <div class="asset-card-title">MC82 500초 본편 v0.4 (5개국어 통합 자막)</div>
+              <div class="asset-card-spec">1280 × 720 (08:20 MP4) · C01~C37</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           PANEL 4: SHORTS V3 & GLOBAL 5-LANG AUDITION
+           ========================================================= -->
+      <section class="studio-panel" id="panel-shorts">
+        <div class="panel-header-bar">
+          <h1 class="panel-title"> 쇼츠 v3 프론티어 &amp; 글로벌 5개국어 오디션 스튜디오</h1>
+        </div>
+
+        <!-- FEATURED: MC82 500s (08:20) Global 5-Language Standalone Subtitle Player -->
+        <div class="short-studio-card" style="margin-bottom: 22px; border: 1px solid rgba(0, 210, 255, 0.45); box-shadow: 0 10px 35px rgba(0, 210, 255, 0.1);">
+          <div class="short-studio-head" style="background: linear-gradient(90deg, #0d1526, #131c31); padding: 12px 16px;">
+            <span style="font-size: 14px; color: #fff;"> MC82 500초(8분 20초) 본편 v0.4 — 글로벌 5개국어 단독 자막 플레이어 (EN · JA · ZH · PT · KO)</span>
+            <span class="status-badge live">C01~C37 전 구간 · 14개 대사 · 5개국어 단독 컨펌</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; padding: 16px; background: #07090e;">
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <video id="vid-mc82-shorts" controls playsinline preload="metadata" poster="./assets/mc82_500s_sub_preview_1.jpg" src="./assets/mc82_v04_en_500s.mp4" style="width: 100%; aspect-ratio: 16/9; border-radius: 8px; background: #000; border: 1px solid #1f293d;">
+                <track kind="subtitles" srclang="en" label="🇺🇸 English" src="./assets/mc82_v04_en.vtt" default />
+                <track kind="subtitles" srclang="ja" label="🇯🇵 日本語" src="./assets/mc82_v04_ja.vtt" />
+                <track kind="subtitles" srclang="zh" label="🇨🇳 中文" src="./assets/mc82_v04_zh.vtt" />
+                <track kind="subtitles" srclang="pt" label="🇧🇷 Português" src="./assets/mc82_v04_pt.vtt" />
+                <track kind="subtitles" srclang="ko" label="🇰🇷 한국어" src="./assets/mc82_v04_ko.vtt" />
+              </video>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                <img src="./assets/mc82_500s_sub_preview_1.jpg" alt="02:02 EN 단독 자막" style="width:100%; border-radius:6px; border:1px solid #252f42; cursor:pointer;" data-mc82-seek="121.2" data-mc82-target="vid-mc82-shorts" />
+                <img src="./assets/mc82_500s_sub_preview_2.jpg" alt="03:11 JA 단독 자막" style="width:100%; border-radius:6px; border:1px solid #252f42; cursor:pointer;" data-mc82-seek="190.7" data-mc82-target="vid-mc82-shorts" />
+                <img src="./assets/mc82_500s_sub_preview_3.jpg" alt="05:42 ZH 단독 자막" style="width:100%; border-radius:6px; border:1px solid #252f42; cursor:pointer;" data-mc82-seek="341.3" data-mc82-target="vid-mc82-shorts" />
+                <img src="./assets/mc82_500s_sub_preview_4.jpg" alt="07:06 KO 단독 자막" style="width:100%; border-radius:6px; border:1px solid #252f42; cursor:pointer;" data-mc82-seek="424.3" data-mc82-target="vid-mc82-shorts" />
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 12px; justify-content: space-between;">
+              <div>
+                <div style="font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 8px;"> 5개국어 단독 자막 선택 (클릭 시 해당 언어 단독 번인 비디오 &amp; 자막 트랙 즉시 전환):</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+                  <button class="lang-pill-btn active" data-mc82-lang="en">🇺🇸 English</button>
+                  <button class="lang-pill-btn" data-mc82-lang="ja">🇯🇵 日本語</button>
+                  <button class="lang-pill-btn" data-mc82-lang="zh">🇨🇳 中文</button>
+                  <button class="lang-pill-btn" data-mc82-lang="pt">🇧🇷 Português</button>
+                  <button class="lang-pill-btn" data-mc82-lang="ko">🇰🇷 한국어</button>
+                </div>
+
+                <div id="mc82-live-sub-shorts" style="background: #0c1018; border: 1px solid rgba(0, 210, 255, 0.35); border-radius: 8px; padding: 12px 14px; min-height: 72px; margin-bottom: 12px;">
+                  <div style="font-size: 12px; color: #38bdf8; font-weight: 800; margin-bottom: 4px;">[C10 · 02:01 · EN 단독 자막] ️ 현장 음성 대사 (LIVE VOICE)</div>
+                  <div style="font-size: 14px; color: #fef08a; font-weight: 800; line-height: 1.5;">️ “Min, open the door. Who's in there?” (Jun over the intercom)</div>
+                </div>
+
+                <div style="font-size: 12px; font-weight: 800; color: #fff; margin-bottom: 6px;">⏱️ 주요 음성 대사 &amp; 반전 씬 1클릭 타임점프:</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <button class="filter-btn" data-mc82-seek="1.7" data-mc82-target="vid-mc82-shorts">00:01 대리응답</button>
+                  <button class="filter-btn" data-mc82-seek="111.0" data-mc82-target="vid-mc82-shorts">01:51 식탁 대사</button>
+                  <button class="filter-btn" data-mc82-seek="121.2" data-mc82-target="vid-mc82-shorts">02:01 인터폰 대치</button>
+                  <button class="filter-btn" data-mc82-seek="144.2" data-mc82-target="vid-mc82-shorts">02:24 동시 포착</button>
+                  <button class="filter-btn" data-mc82-seek="190.6" data-mc82-target="vid-mc82-shorts">03:10 본인 진술</button>
+                  <button class="filter-btn" data-mc82-seek="243.0" data-mc82-target="vid-mc82-shorts">04:03 손목 비교</button>
+                  <button class="filter-btn" data-mc82-seek="259.4" data-mc82-target="vid-mc82-shorts">04:19 스캐너 대사</button>
+                  <button class="filter-btn" data-mc82-seek="339.8" data-mc82-target="vid-mc82-shorts">05:39 취소 통화</button>
+                  <button class="filter-btn" data-mc82-seek="379.0" data-mc82-target="vid-mc82-shorts">06:19 흉터 전이</button>
+                  <button class="filter-btn" data-mc82-seek="424.2" data-mc82-target="vid-mc82-shorts">07:04 암전 식탁</button>
+                  <button class="filter-btn" data-mc82-seek="486.0" data-mc82-target="vid-mc82-shorts">08:06 오은주 호출</button>
+                </div>
+              </div>
+
+              <div class="meta-list" style="margin-top: 8px;">
+                <div class="meta-row"><span class="meta-k"> 5개국어 단독 트랙</span><span class="meta-v"><a href="./assets/mc82_v04_en.vtt" target="_blank" style="color:#38bdf8;">EN.vtt</a> · <a href="./assets/mc82_v04_ja.vtt" target="_blank" style="color:#38bdf8;">JA.vtt</a> · <a href="./assets/mc82_v04_zh.vtt" target="_blank" style="color:#38bdf8;">ZH.vtt</a> · <a href="./assets/mc82_v04_pt.vtt" target="_blank" style="color:#38bdf8;">PT.vtt</a> · <a href="./assets/mc82_v04_ko.vtt" target="_blank" style="color:#38bdf8;">KO.vtt</a> (+ 5개국어 단독 MP4 &amp; .srt 완비)</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Language Selector Bar -->
+        <div class="lang-selector-bar">
+          <span style="font-size: 12px; font-weight: 800; color: #fff; margin-right: 6px;"> 언어 선택:</span>
+          <button class="lang-pill-btn active" data-lang="kr">🇰🇷 한국어</button>
+          <button class="lang-pill-btn" data-lang="en">🇺🇸 English</button>
+          <button class="lang-pill-btn" data-lang="ja">🇯🇵 日本語</button>
+          <button class="lang-pill-btn" data-lang="zh">🇨🇳 中文</button>
+          <button class="lang-pill-btn" data-lang="pt">🇧🇷 Português</button>
+        </div>
+
+        <div class="shorts-studio-grid">
+          <!-- Short 1: STOIC-EP01 -->
+          <div class="short-studio-card">
+            <div class="short-studio-head">
+              <span>STOIC-EP01 · 거울의 덫 (5개국어 동시)</span>
+              <span class="status-badge live">ACT-07 컨펌·업로드</span>
+            </div>
+            <div class="short-video-wrap">
+              <video id="vid-stoic01" controls playsinline preload="metadata" poster="./assets/stoic_ep01_v3.png" src="./assets/stoic_ep01.mp4"></video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ <span class="lang-voice-tag">한국어 성우 내레이션</span></span>
+                <audio id="aud-stoic01" controls preload="metadata" src="./assets/stoic_ep01_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="short-studio-info">
+              <div style="font-weight: 700; font-size: 13px; color: #fff;">키아로스쿠로 35mm 필름 누아르 (KR·EN·JA·ZH·PT)</div>
+              <div class="script-snippet" id="stoic01-script">
+                “우리가 타인의 인정에 목을 매는 순간, 우리의 영혼은 그들의 거울 속에 갇힌다. 에픽테토스는 말했다. 통제할 수 없는 것을 갈망하는 자는 스스로 노예가 된다.”
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">타이포</span><span class="meta-v">Cinzel Decorative + Gowun Batang</span></div>
+                <div class="meta-row"><span class="meta-k">글로벌</span><span class="meta-v">상단 5개국어 버튼 클릭 시 영상·성우 즉시 전환</span></div>
+              </div>
+              <button class="btn-action approve" data-copy-text="ACT-07(The Stoic Shadow 쇼츠 v3 EP01 5개국어 업로드) 컨펌 완료." data-copy-label="STOIC EP01 5개국어"> ACT-07 EP01 (5개국어) 컨펌됨</button>
+            </div>
+          </div>
+
+          <!-- Short 2: STOIC-EP02 -->
+          <div class="short-studio-card">
+            <div class="short-studio-head">
+              <span>STOIC-EP02 · 불안-회피형 애착 (5개국어 동시)</span>
+              <span class="status-badge live">ACT-07 5개국어 컨펌</span>
+            </div>
+            <div class="short-video-wrap">
+              <video id="vid-stoic02" controls playsinline preload="metadata" poster="./assets/stoic_ep02_v3.png" src="./assets/stoic_ep02.mp4"></video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ <span class="lang-voice-tag">한국어 성우 내레이션</span></span>
+                <audio id="aud-stoic02" controls preload="metadata" src="./assets/stoic_ep02_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="short-studio-info">
+              <div style="font-weight: 700; font-size: 13px; color: #fff;">35mm 은염 입자 &amp; 게이트 위브 (KR·EN·JA·ZH·PT)</div>
+              <div class="script-snippet" id="stoic02-script">
+                “상처받지 않기 위해 먼저 등을 돌리는 침묵. 그것은 독립이 아니라 가장 깊은 두려움의 고백이다. 마르쿠스 아우렐리우스는 말했다. 내면의 성채를 세워라.”
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">타이포</span><span class="meta-v">활판 인쇄 스타일 광학 비네트 인화</span></div>
+                <div class="meta-row"><span class="meta-k">글로벌</span><span class="meta-v">상단 5개국어 버튼 클릭 시 영상·성우 즉시 전환</span></div>
+              </div>
+              <button class="btn-action approve" data-copy-text="ACT-07(The Stoic Shadow 쇼츠 v3 EP02 5개국어 업로드) 컨펌 완료." data-copy-label="STOIC EP02 5개국어 승인"> ACT-07 EP02 (5개국어) 컨펌됨</button>
+            </div>
+          </div>
+
+          <!-- Short 3: STOIC-EP03 -->
+          <div class="short-studio-card">
+            <div class="short-studio-head">
+              <span>STOIC-EP03 · 감정 분리법 (5개국어 동시)</span>
+              <span class="status-badge live">ACT-07 5개국어 컨펌</span>
+            </div>
+            <div class="short-video-wrap">
+              <video id="vid-stoic03" controls playsinline preload="metadata" poster="./assets/stoic_ep03_v3.png" src="./assets/stoic_ep03.mp4"></video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ <span class="lang-voice-tag">한국어 성우 내레이션</span></span>
+                <audio id="aud-stoic03" controls preload="metadata" src="./assets/stoic_ep03_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="short-studio-info">
+              <div style="font-weight: 700; font-size: 13px; color: #fff;">무례한 자를 무너뜨리는 감정 분리법 (KR·EN·JA·ZH·PT)</div>
+              <div class="script-snippet" id="stoic03-script">
+                “누군가 당신에게 모욕을 던질 때, 상처는 그 말 자체가 아니라 당신이 그 말을 받아들이기로 선택한 판단에서 시작된다. 돌멩이가 금화에게 상처를 줄 수는 없다.”
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">런타임</span><span class="meta-v">38.8초 · 35mm 필름 할레이션 v3</span></div>
+                <div class="meta-row"><span class="meta-k">글로벌</span><span class="meta-v">5개국어 단독 영상·성우 합성 완료</span></div>
+              </div>
+              <button class="btn-action approve" data-copy-text="ACT-07(The Stoic Shadow 쇼츠 v3 EP03 5개국어 업로드) 컨펌 완료." data-copy-label="STOIC EP03 5개국어 승인"> ACT-07 EP03 (5개국어) 컨펌됨</button>
+            </div>
+          </div>
+
+          <!-- Short 4: STOIC-EP04 -->
+          <div class="short-studio-card">
+            <div class="short-studio-head">
+              <span>STOIC-EP04 · 비대칭 침묵의 기술 (5개국어 동시)</span>
+              <span class="status-badge live">ACT-07 5개국어 컨펌</span>
+            </div>
+            <div class="short-video-wrap">
+              <video id="vid-stoic04" controls playsinline preload="metadata" poster="./assets/stoic_ep04_v3.png" src="./assets/stoic_ep04.mp4"></video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ <span class="lang-voice-tag">한국어 성우 내레이션</span></span>
+                <audio id="aud-stoic04" controls preload="metadata" src="./assets/stoic_ep04_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="short-studio-info">
+              <div style="font-weight: 700; font-size: 13px; color: #fff;">먼저 입을 여는 자가 패배하는 이유 (KR·EN·JA·ZH·PT)</div>
+              <div class="script-snippet" id="stoic04-script">
+                “불안을 견디지 못해 먼저 침묵을 깨는 자는 자신의 패를 스스로 뒤집어 보인다. 정적을 두려워하지 않는 사람만이 방 안의 중력을 지배한다.”
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">런타임</span><span class="meta-v">35.7초 · 35mm 필름 할레이션 v3</span></div>
+                <div class="meta-row"><span class="meta-k">글로벌</span><span class="meta-v">5개국어 단독 영상·성우 합성 완료</span></div>
+              </div>
+              <button class="btn-action approve" data-copy-text="ACT-07(The Stoic Shadow 쇼츠 v3 EP04 5개국어 업로드) 컨펌 완료." data-copy-label="STOIC EP04 5개국어 승인"> ACT-07 EP04 (5개국어) 컨펌됨</button>
+            </div>
+          </div>
+
+          <!-- Short 5: STOIC-EP05 (NEW) -->
+          <div class="short-studio-card">
+            <div class="short-studio-head">
+              <span>STOIC-EP05 · 세네카의 냉정한 거리두기 (5개국어 동시)</span>
+              <span class="status-badge live">ACT-07 5개국어 컨펌</span>
+            </div>
+            <div class="short-video-wrap">
+              <video id="vid-stoic05" controls playsinline preload="metadata" poster="./assets/stoic_ep05_v3.png" src="./assets/stoic_ep05.mp4"></video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ <span class="lang-voice-tag">한국어 성우 내레이션</span></span>
+                <audio id="aud-stoic05" controls preload="metadata" src="./assets/stoic_ep05_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="short-studio-info">
+              <div style="font-weight: 700; font-size: 13px; color: #fff;">분노를 통제하는 자가 판을 지배한다 (KR·EN·JA·ZH·PT)</div>
+              <div class="script-snippet" id="stoic05-script">
+                “상대의 비열한 도발 앞에서 즉시 화를 내면 그들의 꼭두각시가 됩니다. 세네카는 말했습니다. 분노는 일시적 광기이며, 냉정한 거리두기만이 판을 지배합니다.”
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">런타임</span><span class="meta-v">35mm 금빛 킨츠기 대리석 누아르 v3</span></div>
+                <div class="meta-row"><span class="meta-k">글로벌</span><span class="meta-v">5개국어 단독 영상·성우 합성 완료</span></div>
+              </div>
+              <button class="btn-action approve" data-copy-text="ACT-07(The Stoic Shadow 쇼츠 v3 EP05 5개국어 업로드) 컨펌 완료." data-copy-label="STOIC EP05 5개국어 승인"> ACT-07 EP05 (5개국어) 컨펌됨</button>
+            </div>
+          </div>
+
+          <!-- Short 6: ANOMALY-EP01 (High-Visibility v3.1) -->
+          <div class="short-studio-card">
+            <div class="short-studio-head">
+              <span>ANOMALY-EP01 · 별암복원국 CORR-98 (밝기 개선 v3.1 · 5개국어)</span>
+              <span class="status-badge live">ACT-08 가시성 개선·컨펌</span>
+            </div>
+            <div class="short-video-wrap">
+              <video id="vid-anomaly01" controls playsinline preload="metadata" poster="./assets/anomaly_ep01_v3.png" src="./assets/anomaly_ep01.mp4"></video>
+              <div class="audio-audition-bar">
+                <span class="audio-label">️ <span class="lang-voice-tag">한국어 2인 교차 음성</span></span>
+                <audio id="aud-anomaly01" controls preload="metadata" src="./assets/anomaly_ep01_vo.mp3"></audio>
+              </div>
+            </div>
+            <div class="short-studio-info">
+              <div style="font-weight: 700; font-size: 13px; color: #fff;">1996 VHS 캠코더 고가시성 리마스터 (+65% 명도 · 5개국어)</div>
+              <div class="script-snippet" id="anomaly01-script">
+                “[별암복원국 긴급수칙 제01호 — 고가시성 v3.1] 문밖의 형(준, 34세)은 왼손목 안쪽에 흉터가 있으나, 거실에 앉아 있는 남자의 손목은 깨끗합니다. 고정 댓글의 수칙 원문과 다른 이상현상 3개를 보고하십시오.”
+              </div>
+              <div class="meta-list">
+                <div class="meta-row"><span class="meta-k">가시성 개선</span><span class="meta-v">배경 밝기 +65% · 감마 1.28 · 암부 비네팅 60% 완화</span></div>
+                <div class="meta-row"><span class="meta-k">글로벌</span><span class="meta-v">상단 5개국어 버튼 클릭 시 영상·성우 즉시 전환</span></div>
+              </div>
+              <button class="btn-action approve" data-copy-text="ACT-08(참여형 수칙 괴담 1호 5개국어 쇼츠 v3.1 밝기 개선본 편성 및 고정댓글 수칙 투하) 컨펌 완료." data-copy-label="ANOMALY EP01 v3.1 승인"> ACT-08 (v3.1 밝기개선·5개국어) 컨펌됨</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           PANEL 5: NOVEL READER & WITCHER 3 EMBEDDED ILLUSTRATIONS
+           ========================================================= -->
+      <section class="studio-panel" id="panel-novel">
+        <!-- Novel Control Bar -->
+        <div class="novel-control-bar">
+          <!-- Work Selector -->
+          <div class="work-selector">
+            <button class="work-btn active" data-work="shop">《탑 안의 유일한 중고상점》</button>
+            <button class="work-btn" data-work="inq">《14층의 이단 심문관 : 업폴》</button>
+          </div>
+
+          <!-- Episode Pills (1~5) -->
+          <div class="episode-pills">
+            <button class="ep-pill active" data-ep="1">제1화</button>
+            <button class="ep-pill" data-ep="2">제2화</button>
+            <button class="ep-pill" data-ep="3">제3화</button>
+            <button class="ep-pill" data-ep="4">제4화</button>
+            <button class="ep-pill" data-ep="5">제5화</button>
+          </div>
+
+          <!-- Reader Appearance Controls -->
+          <div class="reader-appearance-controls">
+            <button class="theme-toggle-btn" id="reader-theme-toggle" data-theme="dark"> 다크 잉크</button>
+            <div class="font-size-group">
+              <button class="font-size-btn" data-size="16">가-</button>
+              <button class="font-size-btn active" data-size="18">가</button>
+              <button class="font-size-btn" data-size="20">가+</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ridibooks / Munpia E-Book Centered Reader Box -->
+        <div class="novel-reader-box" id="novel-reader-box" data-theme="dark">
+          <h2 class="reader-ep-heading" id="reader-active-title">제1화. 비가 안쪽으로 내리는 우산 (No. 017)</h2>
+
+          <!-- All 10 Pre-rendered Pure Prose Episodes with Witcher 3 Illustrations -->
+          
+        <article class="novel-episode-content active" id="novel-content-shop-1">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/towershop_ep01_illust.jpg" alt="제1화. 비가 안쪽으로 내리는 우산 (No. 017) 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제1화 오피셜 삽화</span>
+        <span class="illust-caption-desc">️ 1층 골목 끝 유일 중고상점 작업대와 안쪽으로 내리는 먹구름 우산 속 냉각 유리 빗방울</span>
+      </div>
+    </div>
+    
+<p class="p-narration">모두가 위를 올려다보는 탑에서, 나만 혼자 바닥에 떨어진 것들을 주웠다.</p>
+<p class="p-narration">탑의 1층 광장은 언제나 새 장비를 사려는 등반자들로 시끄러웠다. 반짝이는 미스릴 검, 룬 문자가 새겨진 방패, 한 병에 금화 열 닢을 호가하는 상급 회복약까지. 사람들은 더 높은 층으로 올라가기 위해 기꺼이 지갑을 열었다.</p>
+<p class="p-narration">하지만 광장 구석, 햇빛도 잘 들지 않는 골목 끝에 자리 잡은 내 가게—〈1층 유일 중고·수선 상점〉의 문턱을 넘는 사람은 거의 없었다.</p>
+<p class="p-narration">딸랑—</p>
+<p class="p-narration">녹슨 황동 종이 힘없이 울렸다.</p>
+<p class="p-narration">작업대 위에서 돋보기안경을 걸치고 부러진 단검의 코등이를 갈아내던 나는 고개를 들었다.</p>
+<p class="p-narration">문을 열고 들어온 것은 열다섯 살쯤 되어 보이는 소년이었다. 어깨에는 자기 몸집만 한 짐가방이 매달려 있었고, 두 손에는 기묘하게 뒤틀린 검은 우산 하나가 들려 있었다.</p>
+<p class="p-narration">이상한 점은 바깥 날씨가 화창하다는 것이었다.</p>
+<p class="p-narration">그런데도 소년이 걸어 들어온 마른 나무 바닥 위로, 우산의 그림자가 닿는 자리마다 검고 축축한 물기가 번지고 있었다.</p>
+<p class="p-dialogue">&quot;저기…… 간판에 &#x27;무엇이든 고쳐 준다&#x27;고 적혀 있어서요.&quot;</p>
+<p class="p-narration">소년이 우산을 작업대 위에 조심스럽게 내려놓으며 입술을 깨물었다.</p>
+<p class="p-dialogue">&quot;상급 대장간 세 곳에 가 봤는데, 다들 이건 고장 난 저주 아이템이니 당장 소각장에 버리라고 했어요. 값을 쳐주기는커녕 폐기 비용을 내라고 해서…….&quot;</p>
+<p class="p-narration">나는 우산 손잡이에 매달린 광장 대장간의 붉은 불합격 딱지—`[수리 불가 / 즉시 소각 권고]`—를 떼어 내 화로에 던져 넣었다.</p>
+<p class="p-narration">종이가 타오르며 작은 불티가 내 왼손 엄지 끝과 손목의 해묵은 화상 흉터 위로 튀었지만, 나는 눈도 깜빡이지 않고 왼손에 감긴 검은 무명 천을 마저 끌어 올려 손목을 덮었다.</p>
+<p class="p-dialogue">&quot;요즘 광장 대장간 애들은 매듭 하나 못 풀어서 멀쩡한 구름을 태우라고 하네.&quot;</p>
+<p class="p-narration">내가 혼잣말처럼 중얼거리며 우산을 작업대 위로 끌어당겼다.</p>
+<p class="p-narration">불티가 피부에 닿았는데도 따끔거리지 않았다. 내 손끝이 아직 온기라고 부를 수 있는 건, 부서진 물건의 틈에 밴 남의 기억뿐이었다.</p>
+<p class="p-narration">우산을 반쯤 펼치자, 검은 천 안쪽 중앙에 어른 주먹만 한 잿빛 구름이 매달려 있었다. 그리고 찢어진 구름 천의 솔기 사이로, 차갑고 단단한 유리 알갱이 같은 빗방울들이 투둑, 투두둑 소리를 내며 작업대 가죽 매트 위로 쏟아져 내렸다.</p>
+<p class="p-narration">``</p>
+<p class="p-narration">``</p>
+<p class="p-narration">``</p>
+<p class="p-dialogue">&quot;소각장에 버렸으면 큰일 날 뻔했네.&quot;</p>
+<p class="p-narration">내가 핀셋으로 가죽 매트 위에 굴러다니는 투명한 유리 빗방울 하나를 집어 들며 말하자, 소년의 눈이 커졌다.</p>
+<p class="p-dialogue">&quot;고칠 수 있어요?&quot;</p>
+<p class="p-dialogue">&quot;고치는 건 어렵지 않아. 안에 고인 유리 빗방울을 전부 회수해서 녹인 다음, 은실로 찢어진 구름 천을 다시 꿰매면 돼.&quot;</p>
+<p class="p-narration">나는 우산 안쪽의 찢어진 구름 천 솔기에 검은 무명 천이 감긴 왼손 검지 끝을 살짝 가져다 대었다.</p>
+<p class="p-narration">불길에 데어도 감각이 없는 내 손끝으로, 파손 부위에 엉겨 붙어 있던 이전 주인의 기억 한 장면이 서늘한 물비린내와 함께 흘러들어 왔다.</p>
+<p class="p-narration">*</p>
+<p class="p-narration">치지직— 쏴아아아!</p>
+<p class="p-narration">살갗을 태우는 14층의 잿빛 산성비가 쏟아지고 있었다.</p>
+<p class="p-narration">기억 속의 주인은 왼팔 갑주가 반쯤 녹아내린 중년의 기사였다. 그는 자기 앞에 웅크린 작은 소년의 머리 위로 이 우산을 깊숙이 씌워 주고 있었다.</p>
+<p class="p-narration">산성비에 맞은 우산 바깥쪽이 타 들어가며 안쪽 구름 천이 찢어졌다. 차가운 유리 빗방울이 새어 나오기 시작하자, 기사는 자기 망토 자락을 찢어 터진 구름 천 사이를 임시로 틀어막았다.</p>
+<p class="p-narration">『가만히 이 안에만 있어라, 시온. 이 우산 안쪽의 비는 사람을 해치지 않아. 아버지가 금방 길만 확인하고 돌아오마.』</p>
+<p class="p-narration">기사는 우산 손잡이를 소년의 손에 쥐여 주고는, 쏟아지는 산성비 속으로 몸을 돌렸다.</p>
+<p class="p-narration">소년은 눈을 질끈 감고 있었기에 아버지의 뒷모습과 우산 안쪽을 가득 채우던 따뜻한 수증기 냄새밖에 기억하지 못했다.</p>
+<p class="p-narration">하지만 찢어진 구름 천의 틈새 너머로, 소년은 보지 못했던 풍경이 스쳤다.</p>
+<p class="p-narration">기사가 걸어 들어간 먼 능선 쪽의 잿빛 빗줄기들은 땅으로 떨어지지 않고 하늘을 향해 거꾸로 솟구치고 있었다. 그리고 그 빗줄기 한가운데에, 빗물 한 방울 묻지 않은 새하얀 우비를 입은 누군가가 가만히 서 있었다.</p>
+<p class="p-narration">그것이 우산의 상처에 매달려 있는 단 하나의 기억이었다.</p>
+<p class="p-narration">나는 손끝을 떼고 조용히 숨을 골랐다.</p>
+<p class="p-narration">작업대 건너편에 서 있는 소년—시온의 낡은 외투 소매 끝에는, 방금 기억 속에서 기사가 찢어 묶어 주었던 것과 똑같은 군청색 망토 천 조각이 감겨 있었다.</p>
+<p class="p-narration">만약 내가 표준 수선법대로 구름 천의 찢어진 솔기를 빈틈없이 당겨 꿰매 버리면, 우산은 신품처럼 완벽해지겠지만 그 솔기 틈에 박혀 있는 아버지의 마지막 온기와 기억의 잔향은 영원히 사라진다.</p>
+<p class="p-dialogue">&quot;손님.&quot;</p>
+<p class="p-narration">내가 은실 바늘을 집어 들다 말고 소년을 불렀다.</p>
+<p class="p-dialogue">&quot;수선 방식이 두 가지가 있어. 첫 번째는 찢어진 구름 천을 완전히 새로 봉합하는 거야. 그러면 우산 안으로 떨어지는 유리 빗방울은 완벽하게 멈추고, 14층 산성비도 전부 막아 주지. 수선비는 은화 다섯 닢이고.&quot;</p>
+<p class="p-narration">소년이 고개를 끄덕이며 주머니에 손을 넣으려 했다. 나는 말을 이었다.</p>
+<p class="p-dialogue">&quot;대신 그렇게 고치면, 이 우산을 펼쳤을 때 나던 그 익숙한 냄새—누군가 마지막으로 안쪽에 남겨 둔 따뜻한 수증기 냄새와 기척은 완전히 사라져.&quot;</p>
+<p class="p-narration">소년의 손이 주머니 입구에서 그대로 멈췄다.</p>
+<p class="p-narration">소년은 한참 동안 우산 안쪽의 작은 구름을 내려다보더니, 아주 작고 떨리는 목소리로 물었다.</p>
+<p class="p-dialogue">&quot;……두 번째 방법은요?&quot;</p>
+<p class="p-dialogue">&quot;찢어진 자리에 박힌 망토 실오라기를 빼내지 않고, 그 둘레에 은실로 얇은 물길만 터 주는 거야. 그러면 방어력은 새것의 아홉 할쯤이고, 가끔 우산을 펼칠 때마다 유리 빗방울이 한두 방울씩 손등에 떨어질 거야. 하지만…….&quot;</p>
+<p class="p-narration">나는 핀셋으로 구름 천 속에 끼어 있던 작은 군청색 실오라기 하나를 건드리지 않고 그대로 두며 말했다.</p>
+<p class="p-dialogue">&quot;이 우산이 기억하고 있는 마지막 날의 공기는 지워지지 않아. 수선비는 똑같이 은화 다섯 닢이야. 어떻게 해 줄까?&quot;</p>
+<p class="p-narration">가게 안에는 벽시계의 초침 소리와, 우산 안에서 톡, 톡 떨어지는 유리 빗방울 소리만 고요하게 울렸다.</p>
+<p class="p-narration">소년은 소매 끝으로 눈가를 한 번 훔치더니, 허리춤에서 은화 다섯 닢을 꺼내 작업대 위에 가지런히 올려놓았다.</p>
+<p class="p-dialogue">&quot;한두 방울쯤 맞는 건 괜찮아요. 두 번째 방법으로 고쳐 주세요.&quot;</p>
+<p class="p-dialogue">&quot;접수 완료. 10분이면 되니까 저기 의자에 앉아 있어.&quot;</p>
+<p class="p-narration">나는 작업등을 한 단계 밝히고, 가장 얇은 달빛 핀셋과 은실 바늘을 집어 들었다.</p>
+<p class="p-narration">먼저 구름 천 표면에 엉겨 붙은 차가운 유리 빗방울 스물네 알을 핀셋으로 한 알씩 집어 수정 트레이에 회수했다. 챙그랑, 챙그랑 맑은 유리 소리가 작업대를 채웠다.</p>
+<p class="p-narration">이어서 달궈진 백금 인두기 끝을 내 맨손 엄지에 살짝 대어 열기를 가늠한 뒤, 구름 천의 가장자리를 살짝 녹여 마감하고 군청색 망토 실오라기를 감싸 안는 형태로 은실을 아홉 번 교차해 꿰매 나갔다.</p>
+<p class="p-narration">마지막으로 회수했던 유리 빗방울들을 소형 도가니에서 녹여 우산살 안쪽의 미세한 회수관으로 흘려 넣자, 쉬이이— 하는 부드러운 숨소리와 함께 사방으로 튀던 냉기가 거짓말처럼 가라앉았다.</p>
+<p class="p-narration">마른 나무 바닥 위로 검게 번져 있던 우산 그림자의 물기가 천천히 말라붙었다.</p>
+<p class="p-narration">내가 우산을 활짝 펼쳐 소년 쪽으로 내밀자, 우산 안쪽의 작은 구름에서 보드랍고 따뜻한 안개비가 피어올랐다가 소년의 뺨에 닿기 직전 포근한 수증기로 흩어졌다.</p>
+<p class="p-narration">소년은 우산 아래로 한 걸음 들어섰다.</p>
+<p class="p-narration">그리고 딱 한 방울, 미처 기화되지 않은 작고 투명한 물방울 하나가 소년의 손등 위로 톡 떨어졌다.</p>
+<p class="p-narration">소년은 손등에 떨어진 물방울을 닦지 않은 채, 우산 속에서 한참 동안 고개를 숙이고 서 있었다.</p>
+<p class="p-dialogue">&quot;……고맙습니다, 아저씨. 다음에 또 고장 나면, 그때도 꼭 여기로 가져올게요.&quot;</p>
+<p class="p-dialogue">&quot;그래. 1층 구석에서 안 망하고 버티고 있을 테니까 언제든 가져와.&quot;</p>
+<p class="p-narration">소년이 우산을 가슴에 안고 골목 밖으로 달려 나간 뒤, 나는 식어 가는 소형 도가니 안을 들여다보았다.</p>
+<p class="p-narration">백금도 무르게 만드는 도가니 바닥에, 스물네 번째 유리 빗방울 한 알이 조금도 녹지 않은 채 굴러다니고 있었다.</p>
+<p class="p-narration">나는 핀셋으로 그 마지막 유리 빗방울을 집어 들어 작은 유리 시약병 안에 넣고 코르크 마개를 막았다.</p>
+<p class="p-narration">마개를 닫자마자 병 바닥에 가라앉아 있어야 할 빗방울이, 빈 시약병 한가운데로 천천히 떠올라 천장 쪽을 향해 멈춰 섰다.</p>
+<p class="p-narration">나는 그 시약병을 들고 작업대 뒤편, 먼지 쌓인 가장 안쪽 찬장으로 걸어갔다.</p>
+<p class="p-narration">어두운 찬장 안에는 이미 똑같은 크기의 유리 시약병 세 개가 나란히 놓여 있었다. 누렇게 바랜 라벨에는 각각 `88층`, `62층`, `47층`이라는 짧은 숫자만 적혀 있었다.</p>
+<p class="p-narration">나는 그 옆에 `14층`이라고 적은 네 번째 시약병을 세워 두고, 작업대로 돌아와 수선 장부를 펼쳤다.</p>
+<p class="p-narration">`[수선 장부 제1호 — 물건 번호 No.017]`</p>
+<p class="p-narration">- 품명: 비가 안쪽으로 내리는 우산</p>
+<p class="p-narration">- 조치: 기억 보존형 아홉 매듭 물길 봉합 완료</p>
+<p class="p-narration">- 수입: 은화 5닢 (현재 상점 잔고: 은화 12닢)</p>
+<p class="p-narration">- 비고: 스물네 번째 빗방울은 녹지 않고 병 위쪽으로 떠오름. 위층부터 새던 게 벌써 14층까지 내려온 모양이다.</p>
+<p class="p-narration">만년필 뚜껑을 닫으려던 바로 그때였다.</p>
+<p class="p-narration">문밖 골목에서 거친 숨소리와 함께, 피비린내와 산성 용액 냄새가 뒤섞인 무거운 군화 발소리가 상점 문 앞에 멈춰 섰다.</p>
+<p class="p-narration">(제1화 끝)*</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-shop-2">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/towershop_ep02_illust.jpg" alt="제2화. 3초를 되감는 은회중시계와 녹슨 태엽 (No. 018) 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제2화 오피셜 삽화</span>
+        <span class="illust-caption-desc">⏳ 3초를 거슬러 올라가는 14분 오차의 은제 회중시계와 시온의 핀셋 미세 수선</span>
+      </div>
+    </div>
+    
+<p class="p-narration">새벽 다섯 시 반, 폐기물 낙하구 바닥에서 주워 온 물건들을 마대 자루에서 쏟아내자 작업대 위에 둔탁한 쇳소리가 굴렀다.</p>
+<p class="p-narration">부러진 단검 자루 세 개, 마력이 다 빠져나가 유리가 하얗게 백화된 하급 포션 공병 일곱 개, 그리고 안쪽 가죽이 땀과 피에 절어 뻣뻣하게 굳은 정강이 보호대 한 짝.</p>
+<p class="p-narration">대부분은 분해해서 고철과 가죽 패치로 팔아야 할 쓰레기였지만, 그 더미 한가운데에서 유독 내 눈길을 끄는 물건이 하나 있었다.</p>
+<p class="p-narration">어른 손바닥만 한 크기의 낡은 은회중시계였다.</p>
+<p class="p-narration">뚜껑 겉면에는 20층대 공략대인 ‘백은의 여명’ 길드 문양이 새겨져 있었으나, 날카로운 손톱 같은 것에 깊게 파여 문양의 절반이 날아가 있었다. 뚜껑을 열자 유리에 거미줄처럼 금이 가 있었고, 시침과 분침은 11시 47분 12초에 박힌 채 미동도 하지 않았다.</p>
+<p class="p-narration">나는 돋보기안경을 고쳐 쓰고, 검은 무명 천이 감긴 왼손으로 시계 본체를 고정한 뒤 오른손 핀셋으로 뒷면 덮개를 열었다.</p>
+<p class="p-narration">달칵.</p>
+<p class="p-narration">덮개가 열리자마자 시계 안쪽 기어 틈새에서 시꺼먼 재 같은 가루가 후드득 떨어졌다.</p>
+<p class="p-narration">일반적인 태엽 시계가 아니었다. 중심축에 머리카늘보다 얇은 청동 마력선이 일곱 겹으로 감겨 있는, 상층부 정찰조 전용 ‘찰나 회귀형 아티팩트’였다. 위급할 때 용두를 세 번 누르면 착용자의 위치와 신체 상태를 딱 3초 전으로 되돌려 주는 고가의 생존 장비.</p>
+<p class="p-dialogue">&quot;태엽이 끊어진 게 아니군.&quot;</p>
+<p class="p-narration">나는 작업대 위에서 둥글게 몸을 말고 자고 있던 은빛 털뭉치, 하루의 등 너머로 시선을 옮겼다.</p>
+<p class="p-narration">기어 이빨 사이에 끼어 있는 건 단순한 먼지가 아니라, 누군가의 굳어버린 핏자국과…… 시계 주인이 죽기 직전 마지막 3초를 수십 번이나 반복해서 되감다가 과열로 녹아 붙어버린 ‘시간의 찌꺼기’였다.</p>
+<p class="p-narration">아무리 3초를 되돌리는 시계라도, 낙하하는 절벽 한가운데나 심장을 관통당한 직후에 작동시키면 죽음 자체를 피할 수는 없다. 그저 죽어가는 마지막 3초의 고통만을 영원처럼 반복하다가 마력선이 타버릴 뿐이다.</p>
+<p class="p-narration">나는 선반 맨 아래칸에서 맑은 기름이 담긴 종지와 가장 가는 세공용 줄을 꺼냈다.</p>
+<p class="p-narration">왼손 손바닥의 검은 천 아래에서 또다시 서늘한 한기가 바늘처럼 찔러 왔지만, 나는 숨을 고르며 기어 이빨에 눌어붙은 탄화 자국을 한 톨씩 긁어냈다.</p>
+<p class="p-narration">단순히 녹을 닦아내는 작업이 아니었다.</p>
+<p class="p-narration">줄 끝이 일곱 번째 청동 마력선에 닿는 순간, 시계 안에 갇혀 있던 전 주인의 마지막 감각이 내 손끝을 타고 흘러들었다.</p>
+<p class="p-narration">— 비가 아래로 내리지 않고 위로 솟구치는 회색 돌기둥 회랑.</p>
+<p class="p-narration">— 검은 성당 제복 자락과, 등 뒤에서 날아온 흰 빛의 창.</p>
+<p class="p-dialogue">&quot;……또 14층 위쪽인가.&quot;</p>
+<p class="p-narration">나는 미간을 찌푸리며 핀셋을 쥔 오른손에 힘을 주었다.</p>
+<p class="p-narration">타버린 일곱 번째 마력선을 잘라내고, 그 자리에 내가 지난주 3층 폐광석 더미에서 뽑아낸 연철 실을 이중 매듭으로 이어 붙였다. 원래대로라면 3초를 되돌리던 기능은 사라지고, 이제는 그저 ‘다가올 3초 뒤의 충격 방향을 시침의 떨림으로 미리 알려주는’ 투박한 예보 시계로 격하될 터였다.</p>
+<p class="p-narration">하지만 산 자에게는 죽은 뒤의 3초를 되돌리는 시계보다, 칼날이 날아오기 3초 전에 손목에서 먼저 떨어주는 시계가 훨씬 쓸모 있는 법이다.</p>
+<p class="p-narration">째깍. 째깍.</p>
+<p class="p-narration">멈춰 있던 초침이 거칠지만 규칙적인 소리를 내며 다시 돌아가기 시작했다.</p>
+<p class="p-narration">나는 시계 안쪽 덮개에 내 수선 표식인 작고 둥근 매듭 각인을 새겨 넣고, 장부 제1호의 열여덟 번째 줄에 만년필로 짧게 적어 내려갔다.</p>
+<p class="p-narration">[물건 번호 No.018]</p>
+<p class="p-narration">품명: 11시 47분에 멈춘 은회중시계 (백은의 여명 정찰조 유품)</p>
+<p class="p-narration">수선 내용: 과열된 3초 회귀 태엽 제거 후 ‘3초 전 진동 예보 태엽’으로 개조.</p>
+<p class="p-narration">비고: 태엽 틈에서 14층 역류 회랑의 산성 안개 성분 검출.</p>
+<p class="p-narration">만년필 뚜껑을 닫던 내 눈길이, 문득 작업대 구석 유리 선반에 놓인 네 개의 낡은 시약병—`[88층]`, `[62층]`, `[47층]`, `[14층]`—으로 향했다.</p>
+<p class="p-narration">어젯밤까지만 해도 병 바닥에서 1밀리미터쯤 떠올라 있던 `[14층: 침묵의 성당]`의 붉은 침전물이, 오늘 아침에는 병의 중간 높이까지 치솟아 유리 마개를 가볍게 두드리고 있었다.</p>
+<p class="p-narration">딸랑—!</p>
+<p class="p-narration">바로 그때, 가게 앞문 위쪽에 매달린 낡은 황동 종이 거칠게 울렸다.</p>
+<p class="p-narration">***</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-shop-3">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/towershop_ep03_illust.jpg" alt="제3화. 거꾸로 맺힌 유리 빗방울과 백유라의 의뢰 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제3화 오피셜 삽화</span>
+        <span class="illust-caption-desc"> 거꾸로 맺힌 유리 빗방울을 응시하는 백유라의 냉랭한 시선과 어두운 가게 조명</span>
+      </div>
+    </div>
+    
+<p class="p-narration">문을 열고 들어선 것은 뜻밖에도 두 사람이었다.</p>
+<p class="p-narration">앞장서서 들어온 것은 어제 내게 은화 다섯 닢을 내밀고 검은 구름 우산(`No.017`)을 수선해 갔던 열다섯 살 연락병 소년, 시온이었다.</p>
+<p class="p-narration">그리고 소년의 바로 한 걸음 뒤에서, 잘 벼려진 장검을 허리에 찬 스물다섯 살가량의 여자 검사—3층 등반가들 사이에서 ‘백은의 검’이라 불리는 백유라—가 젖은 외투 깃을 털며 가게 안으로 들어섰다.</p>
+<p class="p-narration">백유라는 가게 안의 자욱한 먼지 냄새와 낡은 잡동사니 더미를 경계 어린 눈초리로 훑어보더니, 시온의 어깨를 가볍게 잡았다.</p>
+<p class="p-dialogue">&quot;시온, 여기가 네가 말한 그 고물상이야? 14층 산성 폭우를 한 방울도 안 맞고 통과한 우산을 단돈 은화 다섯 닢에 고쳐 줬다는 곳이?&quot;</p>
+<p class="p-dialogue">&quot;네, 유라 누나. 저기 계신 사장님이 고쳐 주셨어요.&quot;</p>
+<p class="p-narration">시온은 숨을 몰아쉬며 두 손으로 소중하게 감싸 쥐고 있던 검은 우산을 내 작업대 위에 조심스럽게 내려놓았다.</p>
+<p class="p-dialogue">&quot;사장님, 말씀하신 대로 우산은 정말 말짱했어요! 14층 남쪽 회랑에서 산성비가 거꾸로 쏟아지는데도 이 우산 아래만은 비가 피해 가더라고요. 그런데…… 내려오는 길에 손잡이 끝 매듭을 보니까, 뭔가 이상한 게 맺혀 있어서요.&quot;</p>
+<p class="p-narration">나는 말없이 우산을 끌어당겨 펼쳐 보았다.</p>
+<p class="p-narration">내가 어제 은실로 아홉 번 교차해 꿰매 두었던 먹구름 패치의 아홉 번째 매듭 끝에, 손톱 절반만 한 크기의 투명한 붉은 유리 구슬 같은 방울이 하나 매달려 있었다.</p>
+<p class="p-narration">단순한 빗물이 아니었다.</p>
+<p class="p-narration">우산의 은실 배수 골이 14층 회랑을 떠돌던 고농도의 심연 마기와 부딪히면서, 그 층의 공기를 한 방울의 결정(結晶)으로 응축해 얼려버린 것이었다. 그리고 그 붉은 결정 안쪽에는, 마치 일분에 예순다섯 번쯤 느리게 맥박치는 듯한 어두운 그림자가 어른거리고 있었다.</p>
+<p class="p-narration">내 왼손 무명 천 아래의 해묵은 흉터가 서늘하게 맥동했다.</p>
+<p class="p-narration">어제 시온이 14층 회랑을 지나갈 때, 그 층에 머물고 있는 ‘무언가’와 아주 가까운 거리에서 스쳐 지나갔다는 뜻이었다.</p>
+<p class="p-dialogue">&quot;사장님, 이거 독성 물질 아니에요? 만져도 되는 거예요?&quot;</p>
+<p class="p-narration">시온이 걱정스럽게 묻자, 나는 핀셋으로 매듭 끝에 맺힌 붉은 유리 방울을 가볍게 떼어내 빈 유리 공병 안에 넣었다.</p>
+<p class="p-narration">또르르— 딸깍.</p>
+<p class="p-narration">놀랍게도 공병 바닥에 떨어진 붉은 유리 방울은 바닥에 가라앉지 않고, 병 뚜껑 쪽을 향해 거꾸로 부유해 올라가 멈췄다.</p>
+<p class="p-narration">그 광경을 지켜보던 백유라의 눈동자가 날카롭게 가늘어졌다.</p>
+<p class="p-narration">그녀는 허리춤의 검자루에 손을 얹은 채 작업대 앞으로 한 걸음 다가섰다.</p>
+<p class="p-dialogue">&quot;……방금 그 결정, 14층 침묵의 성당 외곽에서만 발견되는 고위 오염 결정이군요. 1층 구석에서 폐기물이나 줍는 수선공이 어떻게 14층의 역류 마기를 걸러내는 은실 매듭법을 알고 있는 거죠?&quot;</p>
+<p class="p-narration">백유라의 목소리에는 상층부 길드 정예 대원 특유의 서늘한 심문조가 묻어 있었다.</p>
+<p class="p-narration">하지만 나는 놀라는 기색 없이, 방금 수선을 끝낸 은회중시계(`No.018`)를 그녀의 눈앞 작업대 위로 툭 밀어 놓았다.</p>
+<p class="p-dialogue">&quot;그 질문을 하기 전에, 이 시계 뒷면의 문양부터 확인해 보시죠, 백은의 여명 길드원님.&quot;</p>
+<p class="p-narration">백유라의 시선이 은회중시계에 닿는 순간, 그녀의 호흡이 멎었다.</p>
+<p class="p-narration">반쯤 긁혀 나간 ‘백은의 여명’ 정찰조 문양. 그리고 시계 귀퉁이에 새겨진 작은 이니셜.</p>
+<p class="p-dialogue">&quot;……이건 지난달 18층 진입로에서 실종된 우리 선발대 부대장님의 시계예요! 이걸 어디서……!&quot;</p>
+<p class="p-dialogue">&quot;오늘 새벽 폐기물 낙하구에서 주웠습니다. 원래 달려 있던 3초 회귀 태엽은 주인이 죽기 직전 너무 많이 되감아서 타버렸더군요. 대신 공격이 날아오기 3초 전에 시침이 먼저 떨리는 예보 태엽으로 갈아 끼워 두었습니다.&quot;</p>
+<p class="p-narration">나는 차분하게 장부를 덮으며 백유라를 올려다보았다.</p>
+<p class="p-dialogue">&quot;수선비는 은화 여섯 닢입니다. 만약 그 시계가 왜 18층이 아니라 14층의 산성 안개를 뒤집어쓴 채 떨어졌는지 알고 싶으시다면, 백은의 여명 길드가 가지고 있는 ‘14층 성당의 최근 심문 기록’ 사본 한 장을 수선비 대신 내셔도 좋습니다.&quot;</p>
+<p class="p-narration">백유라가 떨리는 손으로 은회중시계를 집어 들자, 시침이 그녀의 맥박에 맞춰 우웅— 하고 짧게 공명했다.</p>
+<p class="p-narration">그녀는 입술을 굳게 깨물더니, 나를 바라보는 눈빛에서 오만함을 거두고 깊게 고개를 숙였다.</p>
+<p class="p-narration">(《탑 안의 유일한 중고상점》 제3화 끝)</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-shop-4">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/towershop_ep04_illust.jpg" alt="제4화. 14층의 심문 기록 사본과 녹슨 은제 성표 (No. 019) 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제4화 오피셜 삽화</span>
+        <span class="illust-caption-desc"> 14층 심문 기록 사본과 촛불 아래 핏빛으로 드러난 녹슨 은제 성표의 각인</span>
+      </div>
+    </div>
+    
+<p class="p-narration">백유라는 약속을 지키는 데 꼬박 스물네 시간도 걸리지 않았다.</p>
+<p class="p-narration">다음 날 정오가 조금 지났을 무렵, 비에 젖은 망토를 두른 백유라가 가게 문을 열고 들어와 내 작업대 위에 납으로 봉인된 회색 서류철 하나와 손바닥만 한 가죽 주머니를 내려놓았다.</p>
+<p class="p-dialogue">&quot;어제 말씀하신 수선비 대신입니다. 백은의 여명 길드 정보부가 입수한 ‘14층 침묵의 성당 최근 월간 심문·감찰 기록 사본’이에요.&quot;</p>
+<p class="p-narration">백유라의 눈 밑에는 밤새 상층부 기록실을 뒤진 듯 짙은 그늘이 내려앉아 있었다.</p>
+<p class="p-narration">그녀는 가죽 주머니를 풀어, 그 안에서 검붉은 녹이 슬어 테두리가 뭉개진 육각형 은제 성표(聖標) 하나를 꺼내 은회중시계(`No.018`) 옆에 나란히 놓았다.</p>
+<p class="p-dialogue">&quot;그리고 이건…… 어제 고쳐 주신 시계와 같은 낙하구 구역에서 우리 수색조가 뒤늦게 찾아낸 부대장님의 인식표예요. 이상하게도 성표 가운데가 무언가에 찔린 것처럼 오목하게 휘어 있어서, 이것도 함께 수선이 가능한지 여쭤보려고요.&quot;</p>
+<p class="p-narration">나는 대답 대신 먼저 회색 서류철의 납 봉인을 칼끝으로 갈라 열었다.</p>
+<p class="p-narration">습기 찬 양피지 냄새와 함께, 14층 특유의 산성 안개에 종이 끝이 누렇게 부식된 감찰 문서들이 모습을 드러냈다.</p>
+<p class="p-narration">[침묵의 교구 · 월간 오염 및 이단 심문 보고서 (제14지층)]</p>
+<p class="p-narration">- 처형 집행 건수: 14건 (집행관: 고위 처형인 이브 베스퍼)</p>
+<p class="p-narration">- 15층 경계 균열 정찰대 오염 판정: 이상 없음 (0건)</p>
+<p class="p-narration">- 감찰 문서 대조 및 최종 서명: 하급 심문관 루칸 헤일</p>
+<p class="p-narration">내 시선이 문서 맨 아래쪽에 적힌 이름과, 그 옆에 붉은 밀랍으로 찍힌 심문관 인장 위에서 멈췄다.</p>
+<p class="p-narration">`루칸 헤일.`</p>
+<p class="p-narration">익숙한 이름은 아니었다.</p>
+<p class="p-narration">하지만 그 이름 옆에 만년필로 그어진 서명의 마지막 획—글자 끝을 바깥으로 빼지 않고 안쪽으로 한 번 꺾어 매듭짓듯 눌러 쓴 필체—을 보는 순간, 내 왼손 손바닥을 감싼 검은 무명 천 아래에서 묵직한 진동이 한 번 울렸다.</p>
+<p class="p-narration">그건 오래전 탑 상층부 성기사단에서 암호 문서를 작성할 때만 쓰던, 이미 명맥이 끊긴 고전 서기법(書記法)이었다.</p>
+<p class="p-dialogue">&quot;……흥미롭군요. 15층 경계 균열에서 돌아온 정찰대의 오염 판정이 전원 ‘0건’이라.&quot;</p>
+<p class="p-narration">나는 서류철을 덮어 한쪽으로 밀어 두고, 돋보기안경을 내린 채 백유라가 가져온 녹슨 은제 성표(`No.019`)를 핀셋으로 집어 올렸다.</p>
+<p class="p-dialogue">&quot;백유라 씨, 부대장님이 실종되신 곳이 분명 18층 진입로라고 하셨죠?&quot;</p>
+<p class="p-dialogue">&quot;네. 공식 원정 기록에는 분명히 그렇게 나와 있어요.&quot;</p>
+<p class="p-dialogue">&quot;그 기록을 쓴 사람도 방금 이 서류에 서명한 성당 쪽 사람이겠군요.&quot;</p>
+<p class="p-narration">나는 세공용 끌 끝으로 은제 성표 뒷면에 말라붙은 검붉은 녹 껍질을 조심스럽게 벗겨냈다.</p>
+<p class="p-narration">사각, 사각.</p>
+<p class="p-narration">단순한 핏자국이 아니었다.</p>
+<p class="p-narration">어제 시온의 우산(`No.017`) 아홉 번째 매듭 끝에 맺혀 있던 그 붉은 유리 결정과 정확히 똑같은 파장의 심연 독기가 은 표면을 파고들어 결정화되어 있었다.</p>
+<p class="p-narration">더 기이한 것은 녹을 긁어낸 자리에 드러난 미세한 숫자였다.</p>
+<p class="p-narration">원래 성표에는 착용자가 통과한 층수가 자동으로 각인되게 되어 있다. `10`, `11`, `12`, 그리고 `14`.</p>
+<p class="p-narration">그런데 `12`와 `14` 사이의 좁은 금속 여백에, 누군가 죽기 직전 단검 끝으로 필사적으로 긁어 새긴 듯한 숫자가 거꾸로 박혀 있었다.</p>
+<p class="p-narration">`[ XIII — 낙하구 폐쇄 구역 ]`</p>
+<p class="p-narration">탑의 모든 공식 지도에서 불길하다는 이유로 번호조차 건너뛰고 존재하지 않는 층으로 분류된 곳.</p>
+<p class="p-dialogue">‘지워진 13번째 지층.’</p>
+<p class="p-dialogue">&quot;부대장님은 18층에서 실종되신 게 아닙니다.&quot;</p>
+<p class="p-narration">나는 약품 솜으로 성표의 독기를 닦아내며 나직하게 말했다.</p>
+<p class="p-dialogue">&quot;14층 성당 바닥 아래, 지도에서 지워진 13번째 층과 맞닿은 지하 소각 구역에서 무언가를 보신 겁니다. 그리고 이 성표를 누군가의 손등에 힘껏 내리찍은 뒤에 아래로 던지셨군요.&quot;</p>
+<p class="p-narration">성표의 오목하게 휜 중심부 뒷면에는, 누군가의 손등뼈를 관통하며 남긴 듯한 십자 모양의 미세한 골분(骨粉) 자국이 하얗게 박혀 있었다.</p>
+<p class="p-narration">***</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-shop-5">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/towershop_ep05_illust.jpg" alt="제5화. 부러진 처형인의 은장도와 마개가 열린 시약병 (No. 020) 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제5화 오피셜 삽화</span>
+        <span class="illust-caption-desc">️ 부러진 처형인의 은장도와 14층의 원한 어린 기억을 머금은 채 역류하는 발광 시약병</span>
+      </div>
+    </div>
+    
+<p class="p-narration">백유라가 창백해진 얼굴로 성표와 심문 기록 사본을 챙겨 돌아간 뒤, 가게 안에는 다시 괘종시계 초침 소리만 남았다.</p>
+<p class="p-narration">나는 수선 장부 제1호를 펼쳐 열아홉 번째 줄을 채워 넣었다.</p>
+<p class="p-narration">[물건 번호 No.019]</p>
+<p class="p-narration">품명: 찌그러진 백은의 여명 부대장 은제 성표</p>
+<p class="p-narration">수선 내용: 심연 시체독 결정 박리 및 형태 복원.</p>
+<p class="p-narration">비고: `12층`과 `14층` 사이, 지워진 13번째 지층의 수기 각인 및 십자형 골분 흔적 확인.</p>
+<p class="p-narration">장부를 덮으려던 참에, 가게 뒷문 쪽 작은 창틀을 두드리는 소리가 났다.</p>
+<p class="p-narration">똑, 똑.</p>
+<p class="p-narration">창문을 열자, 연락병 소년 시온이 숨을 헐떡이며 비에 젖지 않은 검은 우산(`No.017`)을 접어 들고 서 있었다. 소년의 손에는 낡은 마포 천으로 둘둘 감싼 길쭉한 쇳조각 하나가 들려 있었다.</p>
+<p class="p-dialogue">&quot;사장님! 오늘 오후에 14층 성당 외곽 하수구 쪽으로 연락 문서를 배달하러 갔다가, 배수로 철창 틈에 이게 끼어 있는 걸 주웠어요. 보통 쇳조각이 아닌 것 같아서…… 혹시 사장님께 쓸모가 있을까 하고요!&quot;</p>
+<p class="p-narration">나는 시온이 내민 마포 천을 받아 작업대 위에서 펼쳤다.</p>
+<p class="p-narration">천 안에 들어 있던 것은 손잡이 없이 칼날 끝부분만 세 치쯤 부러진 은장도(銀粧刀) 파편이었다.</p>
+<p class="p-narration">칼날 표면에는 침묵의 교구 고위 처형인에게만 하사되는 ‘검은 단두대’ 문양이 절반쯤 남아 있었고, 예리한 날 끝에는 두 사람의 피가 엉겨 붙어 있었다.</p>
+<p class="p-narration">하나는 심연의 시체독에 오염되어 검붉게 타들어 간 여자의 피.</p>
+<p class="p-narration">그리고 다른 하나는…… 그 시체독을 게걸스럽게 집어삼키며 살아 움직이고 있는, 사람의 것이 아닌 심장혈(心臟血)이었다.</p>
+<p class="p-dialogue">&quot;시온.&quot;</p>
+<p class="p-dialogue">&quot;네, 사장님?&quot;</p>
+<p class="p-dialogue">&quot;다음 주부터는 14층 남쪽 회랑 쪽 배달은 다른 연락병에게 넘기도록 해라.&quot;</p>
+<p class="p-narration">나는 지갑에서 은화 열 닢을 꺼내 시온의 손바닥에 쥐여 주었다.</p>
+<p class="p-dialogue">&quot;네가 주워 온 이 칼날 주인들이, 조만간 그 성당 바닥을 꽤 시끄럽게 만들 것 같으니까.&quot;</p>
+<p class="p-narration">시온이 꾸벅 인사를 하고 돌아간 뒤, 나는 핀셋으로 부러진 은장도 파편(`No.020`)을 집어 중화 용액 수조에 담갔다.</p>
+<p class="p-narration">치이이익—!</p>
+<p class="p-narration">칼날에 묻어 있던 두 줄기 피가 용액 속에서 부딪히며 핏빛 연기를 피워 올렸다.</p>
+<p class="p-narration">바로 그 순간이었다.</p>
+<p class="p-narration">퐁—!</p>
+<p class="p-narration">작업대 구석 유리 선반에 놓여 있던 네 개의 시약병 중, `[14층: 침묵의 성당]`이라 적힌 유리병의 코르크 마개가 천장을 향해 힘차게 튀어 올랐다.</p>
+<p class="p-narration">열린 병구(甁口)에서 뿜어져 나온 한 줄기 진홍빛 안개가 중력을 거슬러 작업대 천장으로 수직 상승하더니, 그 옆에 놓인 `[47층]`과 `[62층]` 시약병의 유리벽까지 나란히 공명시키며 가늘게 떨기 시작했다.</p>
+<p class="p-narration">작업대 위에서 자고 있던 은빛 털뭉치 하루가 번쩍 눈을 뜨며 천장을 향해 낮게 으르렁거렸다.</p>
+<p class="p-narration">나는 천천히 왼손의 검은 무명 천 매듭을 어루만지며, 천장에 거꾸로 고인 붉은 안개를 올려다보았다.</p>
+<p class="p-dialogue">&quot;……사흘 만에 두 번째 식사를 끝냈나 보군.&quot;</p>
+<p class="p-narration">(《탑 안의 유일한 중고상점》 제5화 끝)</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-inq-1">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/inquisitor_ep01_illust.jpg" alt="제1화. 거꾸로 내리는 비와 썩어가는 처형인 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제1화 오피셜 삽화</span>
+        <span class="illust-caption-desc">️ 14층 심문실 철문 너머 거꾸로 솟구치는 핏빛 비와 처형인 이브의 서늘한 실루엣</span>
+      </div>
+    </div>
+    
+<p class="p-narration">14층의 비는 사흘 전부터 위로 내렸다.</p>
+<p class="p-narration">납빛 구름이 낮게 깔린 성당 처마 끝에서, 쇠와 살갗을 함께 녹이는 잿빛 산성비가 치지직— 연기를 피워 올리며 떨어지다 말고 허공에서 실낱처럼 방향을 틀어 하늘로 솟구쳤다.</p>
+<p class="p-narration">나는 납 기름을 먹인 검은 심문관 외투 깃을 목 끝까지 여민 채, 진흙과 묵은 핏물이 고인 침묵의 교구 남쪽 회랑을 걸어 내려갔다.</p>
+<p class="p-narration">그러다 걸음을 멈췄다.</p>
+<p class="p-narration">갑주가 녹아내릴까 봐 숙련된 등반자들조차 돌기둥 아래로 몸을 숨기는 빗속에서, 자그마한 인영 하나가 회랑 한가운데를 가로질러 걸어오고 있었다.</p>
+<p class="p-narration">낡은 소매 끝에 군청색 망토 조각을 동여맨 열다섯 살 남짓한 소년이었다.</p>
+<p class="p-narration">소년은 기묘하게 뒤틀린 검은 우산 하나를 머리 위로 깊숙이 눌러쓰고 있었다. 기괴한 것은 14층의 독성 폭우가 우산 위로 쏟아지는데도, 소년의 마른 어깨에는 물기 한 점 묻지 않았다는 점이었다.</p>
+<p class="p-narration">소년과 어깨가 스치는 찰나, 반쯤 들린 우산 안쪽 천장이 눈에 들어왔다.</p>
+<p class="p-narration">검은 천 한가운데 매달린 주먹만 한 잿빛 구름. 그리고 그 구름의 찢어진 솔기를 따라 은실이 아홉 번 교차하며 정교한 물길을 이루고 있었다. 은실의 마지막 아홉 번째 매듭만 손끝에 걸리지 않게 안쪽으로 접어 숨긴, 요즘 공방에서는 보기 드문 고집스러운 마감이었다.</p>
+<p class="p-narration">사방의 빗줄기가 하늘을 향해 거꾸로 들려 올라가는 이 회랑에서, 그 은실 물길 끝에 맺힌 투명한 유리 빗방울 딱 한 알만이 중력을 따라 아래로—톡—소년의 손등 위에 떨어졌다.</p>
+<p class="p-narration">쿵—</p>
+<p class="p-narration">그 유리 알갱이가 소년의 손등에 닿은 바로 그 순간, 내 왼쪽 갈비뼈 아래에서 잠들어 있던 무언가가 불쾌하게 뒤척였다.</p>
+<p class="p-narration">소년은 손등의 물방울을 닦지도 않은 채 우산 손잡이를 가슴에 끌어안고 안개 속으로 총총히 사라졌다.</p>
+<p class="p-narration">나는 제자리에 멈춰 서서, 가죽 장갑을 낀 왼손으로 왼쪽 가슴 위를 지그시 눌렀다.</p>
+<p class="p-dialogue">&quot;……구름 솔기에 아홉 매듭 물길이라.&quot;</p>
+<p class="p-narration">장갑 안에서 내 오른손 검지가 미세하게 까딱였다.</p>
+<p class="p-narration">마지막 매듭을 안쪽으로 접어 숨기는 저 바느질은 상층부 공방에서도 몇 년 전에 맥이 끊긴 수법이었다. 이 썩어 가는 탑 어딘가에 아직 저런 바늘땀을 남기는 괴짜 수선공이 숨어 있다는 뜻이었지만—오늘 밤의 나에게는 남의 우산 주인을 추적할 여유 따위 없었다.</p>
+<p class="p-narration">울컥.</p>
+<p class="p-narration">왼쪽 가슴속, 원래 내 심장이 있어야 할 빈자리에 똬리를 튼 칠흑 같은 아가리가 심혈관을 거칠게 물어뜯었다.</p>
+<p class="p-narration">나는 미간 하나 찌푸리지 않은 채 코트 깃 안쪽으로 길게 숨을 삼켰다.</p>
+<p class="p-narration">일 년 전 40층 원정대에서, 내가 등을 맡겼던 백색 성녀와 동료들의 창끝에 심장이 꿰뚫렸을 때 ‘루칸 헤일’이라는 인간은 이미 죽었다. 40층에서 죽은 시체가 스물여섯 개 층을 굴러떨어져—교단이 기록에서조차 지워 버린 열세 번째 층계의 공백을 건너뛰고—왜 하필 이 14층의 시체 구덩이에서 눈을 떴는지, 그 이유를 나는 아직 모른다.</p>
+<p class="p-narration">분명한 것은 단 하나뿐이었다.</p>
+<p class="p-narration">지금 내 흉강 안에서 분당 예순다섯 번씩 느릿하게 뛰고 있는 것은 심연에서 기어 올라온 ‘무명의 기생체’—이단심문소 법전 제1조에 따라 즉시 화형에 처해질 금기 그 자체라는 사실.</p>
+<p class="p-narration">사흘에 한 번, 상급 각성자의 고농도 성혈(聖血)이나 심연에 오염된 독기를 먹이지 않으면 이 괴물은 숙주인 내 내장부터 안쪽에서 갉아먹기 시작한다.</p>
+<p class="p-narration">그리고 오늘이 바로 그 사흘째 되는 밤이었다.</p>
+<p class="p-narration">끼이익— 쿵.</p>
+<p class="p-narration">습기와 녹 냄새가 돌벽에 축축하게 달라붙은 대성당 지하 제3심문실 계단 끝.</p>
+<p class="p-narration">굳게 닫힌 철문 앞에 백금빛 머리카락을 단정하게 넘긴 창백한 청년 하나가 서 있었다.</p>
+<p class="p-narration">교구 사냥개 부대의 제1검이자, 성직자들이 뒤에서 ‘심문관의 개’라고 수군거리는 사내—세드릭 홀리스(23세)였다.</p>
+<p class="p-narration">방금 위층 독방에서 누군가를 베어 넘기고 내려왔는지, 그의 은회색 제복 소매 끝에는 아직 식지 않은 핏방울이 맺혀 있었다. 내 군화 소리를 듣자마자 세드릭은 칼자루에서 손을 떼고 지나칠 만큼 공손한 각도로 고개를 숙였다.</p>
+<p class="p-dialogue">&quot;오셨습니까, 루칸 심문관님. 밤비가 거셉니다. 외투에 습기가 배었습니다.&quot;</p>
+<p class="p-narration">세드릭이 내 어깨의 물기를 털어 내려다 말고, 손끝이 내 옷깃에 닿기 직전 푸른 눈동자를 내 왼쪽 가슴께로 낮게 내렸다.</p>
+<p class="p-dialogue">&quot;……오늘 밤은, 소리가 평소보다 거칠군요. 쉬셔야겠습니다.&quot;</p>
+<p class="p-narration">삼 년 전, 튜토리얼 층의 시체 구덩이에서 왼쪽 고막이 터진 채 죽어가던 열여덟 살짜리 소년을 변덕으로 건져 올렸더니, 어느새 교구에서 가장 잔혹한 검사로 자라났다. 삼 년 전 내 품에 안겨 살아날 때 인간이던 시절의 내 심장 박동을 귀에 새겼던 그는, 일 년 전 내가 40층에서 돌아온 날부터 내 가슴속 소리가 인간의 것이 아니게 되었다는 걸 알고도 입을 다물고 있는 유일한 공범이었다.</p>
+<p class="p-dialogue">&quot;상관없다, 세드릭. 오늘 밤 식사는 저 문 안에 이미 차려져 있으니까.&quot;</p>
+<p class="p-narration">내가 제3심문실의 묵직한 철문 손잡이로 시선을 옮기자, 세드릭의 창백한 얼굴에서 표정이 싹 지워졌다. 그가 반걸음 옆으로 비켜서며 철문 앞을 가로막았다.</p>
+<p class="p-dialogue">&quot;안쪽에 들어와 있는 건 상급 처형인 이브 베스퍼입니다. 지난주까지 심문관님의 직속 상관이었고, 심문관님의 사상 검증 서류를 뒤지던 여자입니다. 아무리 부상을 입었다고 해도 단둘이 마주하시는 건 위험합니다. 제가 칼을 뽑고 안에 함께 서 있겠습니다.&quot;</p>
+<p class="p-dialogue">&quot;검은 단두대라 불리는 여자가 자기 부하의 부하 앞에서 무릎 꿇는 꼴을 보이고 싶어 하겠나. 문밖을 지켜라. 쥐새끼 한 마리도 이 복도 계단 아래로 내려오지 못하게 해.&quot;</p>
+<p class="p-dialogue">&quot;……그 여자가 심문관님의 목에 손끝 하나라도 대면, 그땐 철문째로 베어 버리겠습니다.&quot;</p>
+<p class="p-narration">세드릭이 못마땅하게 입술을 깨물며 옆으로 물러섰다.</p>
+<p class="p-narration">나는 무거운 철문 빗장을 밀어 올리고 제3심문실 안으로 걸어 들어갔다.</p>
+<p class="p-narration">철컥.</p>
+<p class="p-narration">등 뒤로 철문이 잠기자, 촛불 몇 개만 위태롭게 흔들리는 좁은 돌방 안으로 숨 막히는 정적이 내려앉았다.</p>
+<p class="p-narration">방 가장 안쪽, 차가운 석조 심문대 옆에 기대어 서 있던 여자가 어둠 속에서 천천히 고개를 들었다.</p>
+<p class="p-narration">칠흑 같은 검은 머리카락에, 목 끝까지 빈틈없이 은버클을 채운 검은 가죽 처형인 제복.</p>
+<p class="p-narration">14층 침묵의 교구 상급 처형인, 이브 베스퍼(27세)였다.</p>
+<p class="p-narration">원래의 서열대로라면 말단 심문관에 불과한 내가 먼저 무릎을 꿇고 예를 갖춰야 할 상관이었다.</p>
+<p class="p-narration">하지만 지금 이브는 왼손으로 자신의 목덜미 아래를 강하게 틀어쥔 채, 창백한 관자놀이에 맺힌 식은땀을 애써 무시하고 있었다.</p>
+<p class="p-dialogue">&quot;……문은 확실히 잠갔나, 루칸 헤일.&quot;</p>
+<p class="p-narration">목소리는 평소처럼 오만하고 서늘했지만, 문장 끝에 매달린 숨결에는 미세한 떨림과 열기가 섞여 있었다.</p>
+<p class="p-dialogue">&quot;예, 처형인님. 문밖에는 제 사냥개만 세워 두었습니다.&quot;</p>
+<p class="p-narration">나는 젖은 겉외투를 벗어 나무 의자 등받이에 걸쳐 두고, 느릿한 걸음으로 석조 심문대를 향해 걸어갔다. 내가 한 걸음씩 다가갈 때마다 이브의 검은 눈동자가 경계심으로 날카롭게 수축했다.</p>
+<p class="p-narration">사흘 전, 15층 경계 구역의 심연 균열 토벌에서 돌아온 이브는 상급 교구에 ‘부상자 및 오염자 없음’이라고 허위 보고서를 올렸다.</p>
+<p class="p-narration">하지만 내 가슴속 괴물은 본당 건너편에서도 그녀의 거짓말을 냄새로 먼저 맡았다. 완벽하게 여며진 그녀의 가죽 제복 아래, 왼쪽 쇄골에서 심장 쪽으로 ‘심연의 시체독’이 검붉은 뿌리처럼 번지며 그녀의 마력과 이성을 실시간으로 갉아먹고 있었다.</p>
+<p class="p-narration">교구 법전 제1조.</p>
+<p class="p-narration">심연에 오염된 처형인은 직위를 막론하고 발견 즉시 지하 소각로에서 처분한다.</p>
+<p class="p-dialogue">&quot;약조했던 의무 기록 위조는 끝냈겠지.&quot;</p>
+<p class="p-narration">이브가 석조 심문대 모서리를 한 손으로 짚으며 나를 노려보았다.</p>
+<p class="p-dialogue">&quot;이번 달 정기 감사에서 내 오염 수치를 지워 주는 대가로, 네가 요구한 북부 구역 수색권은 오늘부로 결재했다. 그러니 네가 조합했다는 중화제 주사기만 이리로 넘기고 당장 내 눈앞에서 꺼져.&quot;</p>
+<p class="p-dialogue">&quot;늘 명령만 내리시더니, 거래의 순서를 잊으신 모양입니다, 처형인님.&quot;</p>
+<p class="p-narration">나는 이브의 코앞—그녀가 내뱉는 뜨거운 날숨이 내 턱 끝에 닿을 만큼 가까운 거리까지 걸어가 멈춰 섰다.</p>
+<p class="p-narration">등 뒤가 석조 심문대에 막혀 더 물러설 곳이 없어진 이브의 어깨가 딱딱하게 굳었다.</p>
+<p class="p-narration">스릉—!</p>
+<p class="p-narration">은빛 섬광이 번쩍하더니, 이브의 오른손 소매에서 빠져나온 짧은 은장도 끝이 내 목울대 앞 일 밀리미터 허공에 정확히 멈춰 섰다.</p>
+<p class="p-narration">서늘한 칼날이 내 목 피부를 누르며 얕은 핏방울 하나를 맺히게 했다.</p>
+<p class="p-narration">그와 동시에, 등 뒤의 두꺼운 철문 경첩 너머에서 누군가의 칼자루 코등이가 철문에 맞닿는 아주 낮고 단단한 금속음—달칵—이 한 번 울렸다.</p>
+<p class="p-dialogue">&quot;거리 지켜라, 말단.&quot;</p>
+<p class="p-narration">이브가 살기 어린 목소리로 속삭였다.</p>
+<p class="p-dialogue">&quot;내 혈관에 시체독이 좀 돌고 있다고 해서, 네 목 하나 못 따고 죽을 줄 알았나?&quot;</p>
+<p class="p-narration">나는 칼날을 피해 고개를 뒤로 빼는 대신, 오히려 반 치쯤 목을 앞으로 기울이며 왼손 가죽 장갑으로 그녀의 은장도 칼등을 가볍게 감싸 쥐었다.</p>
+<p class="p-narration">내 목에서 배어 나온 붉은 피 한 줄기가 차가운 은장도 날을 타고 흘러내려 그녀의 손목 쪽으로 미끄러졌다. 칼등을 쥔 내 왼손바닥 너머로, 공포가 아니라 몸 안을 태우는 독기 때문에 미세하게 떨리고 있는 그녀의 손등 맥박이 고스란히 전해졌다.</p>
+<p class="p-dialogue">&quot;찌르십시오. 다만 제 심장이 멎은 뒤에도, 처형인님의 독은 살아 있을 겁니다.&quot;</p>
+<p class="p-narration">내가 나직하게 속삭이자 이브의 눈매가 사납게 일그러졌다.</p>
+<p class="p-dialogue">&quot;그리고 하나 더 정정해 드리지요. 심연의 시체독은 유리병에 든 약물 따위로 씻어낼 수 있는 병이 아닙니다.&quot;</p>
+<p class="p-narration">나는 빈 오른손을 들어 올려, 검은 가죽 장갑의 중지 끝을 앞니로 물고 천천히 잡아당겼다.</p>
+<p class="p-narration">가죽이 손가락을 타고 벗겨지며 드러난 내 오른손등 한가운데에는, 오래전 무언가에 꿰뚫렸다가 거칠게 아문 검붉은 십자형 관통상이 선명하게 박혀 있었다.</p>
+<p class="p-narration">장갑을 벗은 내 창백한 오른손 끝이 떨리는 그녀의 손목을 스쳐 지나가, 그녀의 목 끝까지 채워진 처형인 제복의 첫 번째 은버클 위에 닿았다.</p>
+<p class="p-dialogue">&quot;살고 싶으시면, 심문대에 앉으십시오. 칼은 쥐고 계셔도 됩니다.&quot;</p>
+<p class="p-narration">딸깍.</p>
+<p class="p-narration">내 오른손 검지 끝이 그녀의 목덜미 첫 번째 은버클을 풀었다.</p>
+<p class="p-narration">언제나 빈틈없이 잠겨 있던 검은 가죽 깃이 한 치쯤 벌어지며, 땀에 젖은 하얀 목선과 그 아래 왼쪽 쇄골을 따라 검은 백합의 세 꽃잎처럼 기괴하게 피어난 검붉은 독맥이 촛불 아래 적나라하게 드러났다.</p>
+<p class="p-narration">바로 그 순간이었다.</p>
+<p class="p-narration">가죽 깃이 벌어지자마자 내 오른손등의 해묵은 십자형 흉터를 내려다보던 이브의 서늘한 눈동자와 내 시선이 허공에서 정면으로 부딪혔다.</p>
+<p class="p-narration">나도 모르게 내 시선이 아주 짧게, 일 밀리미터쯤 먼저 옆으로 비껴갔다.</p>
+<p class="p-narration">내 목울대에 닿아 있던 은장도는 거둬지지 않았다. 오히려 이브는 단검 끝을 내 피부에 더 깊이 밀어 넣으며, 열기에 들뜬 입술을 내 귓가 바로 아래까지 바짝 붙여 왔다.</p>
+<p class="p-dialogue">&quot;……네 심장.&quot;</p>
+<p class="p-narration">피비린내와 뜨거운 숨결이 섞인 이브의 속삭임이 내 목덜미를 스쳤다.</p>
+<p class="p-dialogue">&quot;사람 소리가 아니더군, 루칸 헤일. 일주일 내내 본당에서 듣고 있었어.&quot;</p>
+<p class="p-narration">(제1화 끝)*</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-inq-2">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/inquisitor_ep02_illust.jpg" alt="제2화. 검은 백합의 첫 번째 꽃잎과 고해성사의 밤 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제2화 오피셜 삽화</span>
+        <span class="illust-caption-desc"> 쇄골에 피어난 검은 백합 낙인 1단계와 촛불 그림자 속 루칸의 차가운 시선</span>
+      </div>
+    </div>
+    
+<p class="p-dialogue">&quot;……네 심장. 사람 소리가 아니더군, 루칸 헤일. 일주일 내내 본당에서 듣고 있었어.&quot;</p>
+<p class="p-narration">내 목덜미 바로 아래에서 흩어지는 이브 베스퍼의 뜨거운 숨결에는 피비린내와 달콤한 시체독의 향기가 뒤섞여 있었다.</p>
+<p class="p-narration">내 목울대를 누르고 있는 그녀의 은장도 날 끝에서 붉은 피 한 방울이 더 배어 나와, 내가 방금 풀어 헤친 그녀의 검은 가죽 제복 깃 사이로 뚝 떨어졌다.</p>
+<p class="p-narration">창백한 왼쪽 쇄골 위, 땀에 젖어 가쁘게 오르내리는 살결 위로 검붉은 독맥이 검은 백합의 세 꽃잎 모양으로 선명하게 피어나 있었다.</p>
+<p class="p-narration">일주일 전 15층 경계 균열 토벌에서 감염된 심연의 시체독. 그대로 두면 오늘 자정이 지나기 전에 그녀의 심장 판막을 녹이고 이성을 마비시켜, 교단 지하 소각장으로 끌려가게 만들 1급 오염이었다.</p>
+<p class="p-narration">하지만 내 시선은 그녀의 독맥보다, 그녀가 내 오른손등의 십자형 관통상을 보자마자 눈동자를 흔들었던 그 찰나의 반응에 꽂혀 있었다.</p>
+<p class="p-dialogue">&quot;처형인님께서 제 심장 소리에 그토록 관심이 많으신 줄은 몰랐습니다.&quot;</p>
+<p class="p-narration">나는 목에 닿은 은장도를 치우지 않은 채, 맨손인 오른손 손바닥을 들어 그녀의 차가운 왼쪽 뺨과 턱선을 감싸 쥐었다.</p>
+<p class="p-narration">이브의 검은 눈동자가 사납게 부릅떠졌으나, 고열로 달아오른 그녀의 피부는 내 서늘한 손바닥이 닿자마자 본능적으로 움찔하며 미세한 전율을 일으켰다.</p>
+<p class="p-dialogue">&quot;하지만 지금 더 급한 건 제 심장이 아니라, 처형인님의 이 검은 백합입니다. 세 장의 꽃잎이 모두 피어오르면 그땐 제가 아니라 성당의 파문 집행관들이 이 문을 부수고 들어올 텐데요.&quot;</p>
+<p class="p-dialogue">&quot;……입 닥쳐. 네가 만든 중화제 주사나 내놓고 당장 물러서.&quot;</p>
+<p class="p-dialogue">&quot;말씀드렸을 텐데요. 심연의 독은 바늘로 씻어내는 게 아니라, 더 굶주린 포식자에게 먹여야 사라진다는 걸.&quot;</p>
+<p class="p-narration">나는 왼손으로 그녀의 단검 쥔 손목을 단단히 제압해 차가운 돌 심문대 바닥에 누르고, 오른손 엄지손가락으로 그녀의 왼쪽 쇄골 위에 피어난 첫 번째 검붉은 꽃잎 무늬를 천천히 쓸어내렸다.</p>
+<p class="p-narration">화아아—</p>
+<p class="p-narration">내 맨손 끝이 독맥이 솟은 피부에 닿는 순간, 이브의 입술 사이로 억누르려던 짧은 신음이 새어 나왔다.</p>
+<p class="p-narration">그녀의 등줄기가 활처럼 휘어지며 돌 심문대 모서리를 짚은 손가락 마디가 하얗게 질렸다.</p>
+<p class="p-narration">고통 때문이 아니었다.</p>
+<p class="p-narration">내 왼쪽 갈비뼈 아래 똬리를 튼 ‘이름 없는 기생체’가 내 오른손등의 십자형 흉터를 통로 삼아, 그녀의 혈관을 태우던 시체독의 열기를 거대한 진공처럼 빨아들이기 시작한 것이다.</p>
+<p class="p-narration">혈관을 찢어발기던 맹독이 빠져나가는 자리마다, 마치 얼음물이 핏줄을 타고 역류하는 듯한 서늘한 쾌감과 아찔한 현기증이 그녀의 신경계를 강타했다.</p>
+<p class="p-dialogue">&quot;하아…… 윽, 너…… 무슨 짓을……!&quot;</p>
+<p class="p-narration">이브는 이를 악물고 내 어깨를 밀어내려 했지만, 독기가 빠져나가며 긴장이 풀린 그녀의 무릎이 힘없이 꺾였다.</p>
+<p class="p-narration">그녀의 상체가 앞으로 무너지며 내 가슴팍에 그대로 기댔고, 흐트러진 흑발 사이로 드러난 그녀의 하얀 목덜미와 내 입술 사이의 거리가 한 치도 남지 않게 좁혀졌다.</p>
+<p class="p-narration">바로 그 순간, 철문 밖 복도에서 지키고 서 있던 세드릭 홀리스가 안쪽의 심상치 않은 기척과 거친 숨소리를 들었는지, 육중한 쇠문고리가 철컥—! 하고 반쯤 아래로 돌아갔다.</p>
+<p class="p-dialogue">&quot;……심문관님. 안에서 칼 떨어지는 소리가 났습니다. 들어가겠습니다.&quot;</p>
+<p class="p-narration">문틈 너머로 세드릭의 낮고 서늘한 목소리가 파고들었다.</p>
+<p class="p-narration">내 품에 반쯤 안긴 채 가쁜 숨을 몰아쉬던 이브의 몸이 뻣뻣하게 굳었다. 고위 처형인인 자신이 하급 심문관의 품에 안겨 제복 앞섶이 풀린 채 떨고 있는 꼴을, 그 하급 심문관의 ‘사냥개’에게 들키는 것만큼은 죽기보다 싫은 기색이었다.</p>
+<p class="p-narration">이브의 떨리는 왼손이 다급하게 내 사제복 깃을 움켜잡아 자기 쪽으로 끌어당겼다.</p>
+<p class="p-dialogue">&quot;……들여보내지 마.&quot;</p>
+<p class="p-narration">그녀가 내 턱 밑에서 거의 소리 없는 입모양으로 속삭였다.</p>
+<p class="p-narration">나는 입꼬리를 아주 미세하게 올리며, 이브의 허리를 한 팔로 받쳐 심문대 위에 앉힌 뒤 문 쪽을 향해 나직하게 명령했다.</p>
+<p class="p-dialogue">&quot;문고리에서 손 떼라, 세드릭. 처형인님께서 막 첫 번째 고해를 시작하셨다.&quot;</p>
+<p class="p-narration">문밖에서 몇 초간 무거운 침묵이 흐르더니, 반쯤 내려갔던 쇠문고리가 다시 제자리로 천천히 올라갔다.</p>
+<p class="p-narration">찰칵.</p>
+<p class="p-narration">다시 찾아온 밀실의 정적 속에서, 나는 이브의 쇄골 위를 내려다보았다.</p>
+<p class="p-narration">세 장의 검은 백합 꽃잎 중 첫 번째 꽃잎이 흔적도 없이 사라져 하얀 살결을 되찾아 있었다. 대신 그 독기를 삼킨 내 가슴속의 괴물이 만족스러운 듯 쿵, 쿵 하고 육중한 고동을 울렸다.</p>
+<p class="p-narration">나는 천천히 이브의 제복 첫 번째 은버클을 다시 채워 주며, 그녀의 눈을 똑바로 들여다보았다.</p>
+<p class="p-dialogue">&quot;나머지 두 꽃잎은 사흘에 한 번씩, 이 시간에만 지워 드립니다. 그 대신…… 아까 제 오른손등의 흉터를 보셨을 때 왜 눈동자가 흔들리셨는지, 다음 심문 날까지 대답을 준비해 오시죠.&quot;</p>
+<p class="p-narration">이브는 채워진 은버클 위로 자기 목을 감싸 쥔 채, 수치심과 경계심, 그리고 방금 겪은 낯선 전율이 뒤엉킨 눈빛으로 나를 노려보았다.</p>
+<p class="p-dialogue">&quot;……1년 전 40층 원정대가 출발하기 전날 밤.&quot;</p>
+<p class="p-narration">이브가 갈라진 목소리로 낮게 내뱉었다.</p>
+<p class="p-dialogue">&quot;대성당 지하 고해실에서, 안대를 쓴 누군가가 자기 오른손등에 똑같은 십자 낙인을 긋고 있었어. 내가 본 게 네 놈이었나, 루칸 헤일?&quot;</p>
+<p class="p-narration">***</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-inq-3">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/inquisitor_ep03_illust.jpg" alt="제3화. 지하 고해실의 안대 쓴 성녀, 세실리 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제3화 오피셜 삽화</span>
+        <span class="illust-caption-desc">️ 지하 고해실의 안대 쓴 성녀 세실리와 차가운 은사슬이 울리는 긴장의 심문</span>
+      </div>
+    </div>
+    
+<p class="p-narration">이브 베스퍼가 뒷문을 통해 흔들리는 걸음으로 제3심문실을 빠져나간 뒤, 나는 피 묻은 손수건으로 목울대의 얕은 상처를 닦으며 복도로 나왔다.</p>
+<p class="p-narration">복도 기둥 아래 서 있던 세드릭 홀리스는 내가 나오자마자 한 걸음 다가섰다.</p>
+<p class="p-narration">그의 차가운 푸른 눈동자가 내 목울대의 핏자국과, 내 사제복 깃에 남아 있는 이브의 체온과 낯선 향기를 귀신같이 포착했다.</p>
+<p class="p-dialogue">&quot;……상처가 났지 않습니까, 심문관님.&quot;</p>
+<p class="p-narration">세드릭의 목소리가 얼음장처럼 낮게 가라앉았다. 그는 주머니에서 깨끗한 흰 거즈를 꺼내 내 목에 대려다 말고, 내 오른손이 장갑을 벗은 맨손이라는 걸 확인하자 손을 멈칫거렸다.</p>
+<p class="p-dialogue">&quot;그 여자가 심문관님의 흉터를 봤습니까? 원하신다면 지금이라도 뒤쫓아가서—&quot;</p>
+<p class="p-dialogue">&quot;가만두어라. 적어도 앞으로 열흘 동안은 그 여자가 우리의 가장 훌륭한 방패막이가 되어 줄 거다.&quot;</p>
+<p class="p-narration">나는 검은 가죽 장갑을 다시 오른손에 끼우며, 복도 끝 더 깊은 지하로 이어지는 나선형 계단을 내려다보았다.</p>
+<p class="p-dialogue">&quot;그보다 세드릭, 지하 고해실의 ‘귀’는 오늘 밤 누구를 만나고 있었지?&quot;</p>
+<p class="p-dialogue">&quot;교구장 대리가 보낸 감찰 사제 두 명을 돌려보낸 뒤로 계속 혼자 계십니다. 다만…… 한 시간 전쯤부터 고해실 창살 너머로 심문관님을 찾으셨습니다.&quot;</p>
+<p class="p-narration">나는 고개를 끄덕이고 세드릭과 함께 나선형 계단을 내려갔다.</p>
+<p class="p-narration">14층 대성당의 가장 깊은 바닥, 역류하는 산성비 소리조차 닿지 않는 절대적인 침묵의 공간.</p>
+<p class="p-narration">검은 철창으로 가로막힌 고해실 맞은편 의자에 앉자, 창살 너머 어둠 속에서 은은한 백합 향기와 함께 흰 성녀복 자락이 스치는 소리가 들렸다.</p>
+<p class="p-narration">창살에 얼굴을 가까이 댄 여인은 눈 위로 검은 비단 안대를 겹겹이 묶고 있었다.</p>
+<p class="p-narration">14층 성당의 신탁을 대변하는 눈먼 성녀, 세실리.</p>
+<p class="p-narration">그녀는 창살 틈으로 가늘고 하얀 손가락을 내밀어, 내 왼쪽 가슴과 일 인치 떨어진 허공을 정확히 가리키며 황홀한 듯 미소 지었다.</p>
+<p class="p-dialogue">&quot;오늘 밤은…… 정말 맛있는 것을 드셨군요, 루칸 경.&quot;</p>
+<p class="p-narration">세실리의 나직한 속삭임이 고해실 안을 울렸다.</p>
+<p class="p-dialogue">&quot;방금 전까지 일분에 예순다섯 번, 굶주린 짐승처럼 거칠게 긁히던 당신의 심장 소리가…… 지금은 예순두 번으로 아주 매끄럽고 묵직하게 뛰고 있어요. 이브 베스퍼 처형인의 피는 달콤하던가요?&quot;</p>
+<p class="p-narration">나는 표정을 지운 채 고해실 창살에 등받이를 기대고 앉았다.</p>
+<p class="p-dialogue">&quot;성녀님께서 도청 취미가 있으신 줄은 몰랐군요. 고해실 밖의 소리까지 다 들으십니까?&quot;</p>
+<p class="p-dialogue">&quot;눈을 감으면 성당의 돌벽을 타고 흐르는 모든 맥박이 들리는걸요.&quot;</p>
+<p class="p-narration">세실리는 검은 비단 안대 아래로 붉은 입술을 호선으로 그리며, 창살 틈 사이로 자기 손끝을 조금 더 내밀어 내 검은 가죽 장갑 끝에 살짝 입을 맞추듯 갖다 댔다.</p>
+<p class="p-dialogue">&quot;그리고 조금 전, 남쪽 회랑을 지나가던 작은 소년의 우산 끝에서…… 유리 구슬 같은 빗방울 하나가 정방향으로 떨어지는 소리도 들었답니다. 하늘로 솟구치는 비만 내리는 이 14층에서, 아래로 떨어지는 비라니. 마치 1년 전 40층에서 추락하던 그날 밤의 당신 같지 않나요?&quot;</p>
+<p class="p-narration">내 눈동자가 서늘하게 가늘어졌다.</p>
+<p class="p-narration">그녀는 고해실 창살 너머로 고개를 갸웃거리며, 성녀답지 않은 은밀하고도 서늘한 목소리로 덧붙였다.</p>
+<p class="p-dialogue">&quot;다음번에 또 그 독을 삼키실 땐, 저를 먼저 불러 주세요, 심문관님. 처형인의 거친 피보다, 제 목덜미의 성혈(聖血)이 당신 안의 그 아이를 훨씬 더 얌전하게 재워 줄 수 있으니까요.&quot;</p>
+<p class="p-narration">(《14층의 이단 심문관》 제3화 끝)</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-inq-4">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/inquisitor_ep04_illust.jpg" alt="제4화. 두 번째 밤의 호출과 은사슬의 거리 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제4화 오피셜 삽화</span>
+        <span class="illust-caption-desc">️ 빗소리가 멎은 심문실의 은사슬과 루칸 헤일의 서늘한 칼날 대치</span>
+      </div>
+    </div>
+    
+<p class="p-narration">첫 번째 심문이 끝나고 정확히 사흘째 되는 밤이었다.</p>
+<p class="p-narration">일분에 예순두 번으로 차분하게 가라앉아 있던 내 왼쪽 가슴속의 ‘이름 없는 기생체’는, 자정이 가까워지자 다시 예순여섯 번으로 박동을 높이며 내 갈비뼈 안쪽 신경을 사납게 긁어대기 시작했다.</p>
+<p class="p-narration">제3심문실의 차가운 돌 의자에 앉아 회중시계 뚜껑을 닫던 나는, 문밖 복도에서 들려오는 규칙적인 구둣발 소리에 고개를 들었다.</p>
+<p class="p-narration">오늘 밤은 내가 호출장을 보내지 않았다.</p>
+<p class="p-narration">그런데도 문밖에서 지키고 있던 세드릭 홀리스의 나직한 제지 소리와, 그를 무시하고 철문 손잡이를 잡아당기는 거친 금속음이 잇달아 울렸다.</p>
+<p class="p-narration">철컥— 끼이익.</p>
+<p class="p-narration">육중한 철문이 열리고, 비에 젖은 검은 망토를 걸친 이브 베스퍼가 혼자 심문실 안으로 걸어 들어왔다.</p>
+<p class="p-narration">문틈 너머로 세드릭이 금방이라도 검을 뽑을 듯 살기 어린 푸른 눈으로 그녀의 등을 노려보고 있었으나, 내가 눈짓 한 번으로 세드릭을 물렸다.</p>
+<p class="p-narration">철문이 닫히고 빗장이 잠기자, 이브는 젖은 망토를 벗어 바닥에 던져 버렸다.</p>
+<p class="p-narration">사흘 전보다 그녀의 호흡은 훨씬 더 가빴다.</p>
+<p class="p-narration">목 끝까지 채워진 검은 가죽 제복 깃 위로도 열기가 아지랑이처럼 피어올랐고, 땀에 젖은 흑발 몇 가닥이 창백한 뺨에 달라붙어 있었다.</p>
+<p class="p-dialogue">&quot;……일 분 늦었군, 루칸 헤일.&quot;</p>
+<p class="p-narration">이브는 내가 앉은 의자 앞을 지나쳐, 스스로 차가운 돌 심문대 가장자리에 걸터앉았다.</p>
+<p class="p-narration">놀랍게도 그녀는 오늘 은장도를 뽑지 않았다. 대신 심문대 옆구리에 매달린 이단자 구속용 은사슬을 한 손으로 끌어당겨, 자기 왼쪽 손목에 두 번 감아 쥐었다.</p>
+<p class="p-narration">짤랑.</p>
+<p class="p-narration">차가운 은사슬이 그녀의 가느다란 손목 가죽 위에서 선명한 금속음을 냈다.</p>
+<p class="p-dialogue">&quot;사흘 전처럼 내 단검이 바닥에 떨어져서, 문밖에 서 있는 네 사냥개가 문고리를 돌리게 만드는 추태는 두 번 다시 사양이다.&quot;</p>
+<p class="p-narration">이브가 턱을 치켜들며, 열기에 붉게 충혈된 검은 눈동자로 나를 똑바로 내려다보았다.</p>
+<p class="p-dialogue">&quot;네 오른손등의 그 십자 흉터가 1년 전 지하 고해실에서 누구에게 받은 건지, 내가 끝까지 캐묻지 않길 바란다면…… 오늘 밤은 소리 나지 않게 끝내라.&quot;</p>
+<p class="p-narration">상관으로서 명령을 내리는 말투였지만, 은사슬을 감아 쥔 그녀의 손등 마디는 독기가 심장 근처까지 파고든 고통과 긴장으로 하얗게 질려 있었다.</p>
+<p class="p-narration">나는 자리에서 일어나 천천히 그녀의 앞으로 다가갔다.</p>
+<p class="p-narration">그리고 두 무릎 사이로 반 걸음 파고들어, 그녀가 도망칠 수 없도록 돌 심문대 양옆을 두 팔로 가두듯 짚었다.</p>
+<p class="p-dialogue">&quot;명령하시는 법이 조금 이상하군요, 처형인님. 사슬을 감은 쪽은 처형인님이신데요.&quot;</p>
+<p class="p-narration">나는 앞니로 오른손 검은 가죽 장갑 끝을 물고 천천히 벗겨냈다.</p>
+<p class="p-narration">사흘 전에는 첫 번째 버클만 풀어도 충분했지만, 두 번째 꽃잎은 그녀의 왼쪽 쇄골 바로 아래, 심장 박동이 피부 위로 고스란히 만져지는 깊은 곳에 자리 잡고 있었다.</p>
+<p class="p-narration">딸깍. 딸깍.</p>
+<p class="p-narration">내 맨손가락 끝이 그녀의 목덜미 첫 번째 은버클에 이어, 두 번째 은버클까지 차례로 풀었다.</p>
+<p class="p-narration">검은 가죽 제복 앞섶이 사흘 전보다 한 치 더 깊게 벌어지며, 촛불 아래로 땀이 맺힌 하얀 쇄골 라인과 그 아래 선명하게 맥동하는 두 번째 검은 백합 꽃잎이 드러났다.</p>
+<p class="p-narration">이브의 턱이 바짝 굳어지며, 그녀가 왼손에 감아 쥔 은사슬이 팽팽하게 당겨졌다.</p>
+<p class="p-dialogue">&quot;소리 내기 싫으시면, 제 어깨를 무셔도 좋습니다.&quot;</p>
+<p class="p-narration">나는 고개를 숙여 내 이마가 그녀의 관자놀이에 닿을 만큼 거리를 좁힌 뒤, 오른손 손바닥 전체를 그녀의 왼쪽 쇄골 아래 뜨거운 피부 위에 밀착시켰다.</p>
+<p class="p-narration">우웅—!</p>
+<p class="p-narration">내 손등의 십자형 관통상과 그녀의 두 번째 독맥이 맞닿는 순간, 사흘 전보다 두 배는 더 맹렬한 흡입력으로 검붉은 시체독이 내 혈관 속으로 역류해 들어왔다.</p>
+<p class="p-dialogue">&quot;……읍!&quot;</p>
+<p class="p-narration">이브는 새어 나오는 신음을 삼키기 위해 자기 입술을 피가 나도록 깨물었다.</p>
+<p class="p-narration">은사슬을 감은 그녀의 왼손이 허공에서 갈 곳을 잃고 헤매더니, 결국 내 사제복 등 뒤 어깨 자락을 손톱이 파고들 만큼 세게 움켜쥐었다.</p>
+<p class="p-narration">독기가 빠져나가는 혈관마다 불타는 열기 대신 서늘한 감각이 차오르며, 그녀의 가쁜 숨결이 내 목덜미와 쇄골 위를 어지럽게 적셨다.</p>
+<p class="p-narration">내 갈비뼈 아래의 괴물은 고위 처형인의 순도 높은 마력이 섞인 독혈을 삼키며, 내 시야가 순간 붉게 물들 만큼 짙은 포만감을 토해냈다.</p>
+<p class="p-narration">단 1분 남짓한 시간이었지만, 내가 오른손을 떼었을 때 이브는 온몸의 힘이 다 빠져나간 사람처럼 내 한쪽 어깨에 이마를 기댄 채 거친 숨만 몰아쉬고 있었다.</p>
+<p class="p-narration">그녀의 하얀 살결 위에는 이제 심장 바로 위쪽에 남은 마지막 세 번째 꽃잎 하나만이 희미하게 남아 있었다.</p>
+<p class="p-dialogue">&quot;……남은 꽃잎은 하나뿐입니다, 이브.&quot;</p>
+<p class="p-narration">내가 처음으로 직함 대신 그녀의 이름을 낮게 부르자, 내 어깨에 이마를 기댄 이브의 속눈썹이 파르르 떨렸다.</p>
+<p class="p-narration">바로 그때였다.</p>
+<p class="p-narration">쾅—! 쾅—!</p>
+<p class="p-narration">제3심문실 바깥 복도 끝에서, 성당 본당의 비상 종소리와 함께 세드릭의 다급한 목소리가 철문을 뚫고 날아들었다.</p>
+<p class="p-dialogue">&quot;심문관님! 지금 막 상층 승강기 회랑을 통해 40층 백색 성녀 세라핀 애시콤 직속 특무 감찰단이 교구에 도착했습니다! 첫 번째 감찰 대상이 제3심문실입니다!&quot;</p>
+<p class="p-narration">***</p>
+        </article>
+        
+
+        <article class="novel-episode-content" id="novel-content-inq-5">
+          
+    <div class="novel-illust-card">
+      <div class="novel-illust-img-wrap">
+        <img src="./assets/inquisitor_ep05_illust.jpg" alt="제5화. 성혈(聖血)의 유혹과 40층의 밀사 삽화" loading="lazy" />
+        <span class="illust-tag">WITCHER 3 DARK FANTASY ART</span>
+      </div>
+      <div class="novel-illust-caption">
+        <span class="illust-caption-badge">제5화 오피셜 삽화</span>
+        <span class="illust-caption-desc"> 붉은 성혈의 흔적과 어둠 속에서 위험한 거래를 제안하는 40층의 가면 밀사</span>
+      </div>
+    </div>
+    
+<p class="p-dialogue">&quot;……40층의 백색 성녀가 직접 감찰단을 보냈다고?&quot;</p>
+<p class="p-narration">내 어깨에서 고개를 번쩍 든 이브의 눈동자에 차가운 이성이 돌아왔다.</p>
+<p class="p-narration">14층은 상층 교단이 버린 오염 격리 구역이다. 40층에 군림하는 백색 성녀 세라핀 애시콤이 이 더러운 역류 성당까지 직속 감찰단을 내려보낸다는 건, 지난 1년간 단 한 번도 없던 일이었다.</p>
+<p class="p-narration">이브는 떨리는 손으로 빠르게 자기 제복의 은버클 두 개를 끝까지 채우고, 바닥에 떨어진 망토를 집어 들었다.</p>
+<p class="p-dialogue">&quot;감찰단이 이 방에서 나와 네가 단둘이 있는 걸 보면, 내 오염 기록 조작부터 네 신원까지 전부 들통난다.&quot;</p>
+<p class="p-narration">이브가 심문실 뒤쪽의 비밀 배수로 통로 문을 열며 나를 돌아보았다.</p>
+<p class="p-narration">그녀의 입술 끝에는 방금 입술을 깨물어 배어 나온 붉은 핏방울이 아직 맺혀 있었다.</p>
+<p class="p-dialogue">&quot;사흘 뒤 자정이다, 루칸 헤일. 그때까지 그 감찰단 놈들한테 목 따이지 말고 살아남아라. 내 마지막 꽃잎을 지우기 전까진…… 내 허락 없이 죽는 것도 불허한다.&quot;</p>
+<p class="p-narration">이브의 검은 망토 자락이 비밀 통로 어둠 속으로 사라지자마자, 나는 심문대 위의 흔적을 지우고 앞쪽 철문을 열었다.</p>
+<p class="p-narration">문밖에 서 있던 세드릭 홀리스가 내 옆에 바짝 붙어 서며 낮게 보고했다.</p>
+<p class="p-dialogue">&quot;감찰단장은 40층 성기사단 소속의 ‘심문관 카시안’입니다. 이상한 점이 있습니다, 심문관님. 교구장 대리의 집무실은 들르지도 않고, 도착하자마자 ‘최근 1년 내 시체 구덩이에서 복귀한 하급 심문관 명단’과 ‘지하 고해실 출입 기록’부터 요구하고 있습니다.&quot;</p>
+<p class="p-narration">내 눈매가 싸늘하게 가라앉았다.</p>
+<p class="p-narration">1년 전 40층에서 내 가슴에 직접 창을 꽂았던 백색 성녀 세라핀.</p>
+<p class="p-narration">그녀가 왜 하필 지금, 26개 층 아래의 14층에서 자신의 손으로 죽인 시체의 흔적을 찾기 시작한 걸까.</p>
+<p class="p-dialogue">&quot;세드릭. 제1심문실에 어제 잡아들인 하급 이단자 두 명을 풀어 일부러 소란을 일으켜라. 감찰단의 발을 15분만 본당에 묶어 두도록.&quot;</p>
+<p class="p-dialogue">&quot;심문관님은 어디로 가십니까?&quot;</p>
+<p class="p-dialogue">&quot;가장 먼저 입을 열 만한 증인을 만나러 간다.&quot;</p>
+<p class="p-narration">나는 세드릭을 본당 쪽으로 올려보내고, 혼자서 가장 깊은 지하 고해실로 내려가는 나선형 계단을 밟았다.</p>
+<p class="p-narration">타닥, 타닥.</p>
+<p class="p-narration">계단 끝, 오늘은 철창문이 있는 일반 고해실이 아니라 그 뒤쪽의 성녀 전용 내실(內室) 제단 문이 반쯤 열려 있었다.</p>
+<p class="p-narration">문틈 사이로 촛불 빛과 함께 짙은 백합 향기가 흘러나왔다.</p>
+<p class="p-narration">내가 내실 안으로 들어서자, 제단 앞 기도의자에 무릎을 꿇고 앉아 있던 흰 성녀복 차림의 여인—성녀 세실리—가 천천히 고개를 돌렸다.</p>
+<p class="p-narration">오늘도 그녀의 눈 위에는 검은 비단 안대가 단단히 묶여 있었다.</p>
+<p class="p-narration">하지만 그녀는 내 발소리가 멈추자마자 기다렸다는 듯 자리에서 일어나, 제단 아래까지 걸어 내려와 내 바로 앞에 섰다.</p>
+<p class="p-dialogue">&quot;오실 줄 알았어요, 루칸 경.&quot;</p>
+<p class="p-narration">세실리가 가만히 코끝을 움직이며, 내 사제복에서 풍기는 미세한 냄새를 맡았다.</p>
+<p class="p-dialogue">&quot;방금 또 그 여자의 시체독을 드셨군요. 독기만 삼켜서는 당신 안의 그 기생체를 영원히 숨길 수 없다고 말씀드렸을 텐데요.&quot;</p>
+<p class="p-dialogue">&quot;40층에서 세라핀의 감찰단이 내려왔습니다, 성녀님.&quot;</p>
+<p class="p-narration">내가 차갑게 말하며 그녀의 한 걸음 앞에서 멈춰 서자, 세실리는 전혀 놀라지 않는 얼굴로 고개를 갸웃거렸다.</p>
+<p class="p-dialogue">&quot;사흘 전 남쪽 회랑에서 정방향으로 떨어진 그 한 방울의 비 때문이에요. 14층의 역류 결계가 단 1초 흔들렸고, 그 틈으로 당신의 심장 파장이 40층의 천공 거울까지 닿았거든요.&quot;</p>
+<p class="p-narration">세실리의 하얀 두 손이 천천히 올라가, 자기 목덜미 뒤쪽을 감싸고 있던 성녀복의 검은 비단 리본 끝을 잡았다.</p>
+<p class="p-narration">스르륵.</p>
+<p class="p-narration">비단 리본이 풀려 바닥으로 흘러내리자, 한 번도 햇빛을 본 적 없는 그녀의 새하얀 목덜미와 가느다란 맥박이 뛰는 경동맥이 내 눈앞에 고스란히 드러났다.</p>
+<p class="p-dialogue">&quot;감찰단의 성검은 심연의 독내를 단숨에 감지해요. 지금 상태로 그들 앞에 서면 3초도 안 되어 들키실 거예요.&quot;</p>
+<p class="p-narration">안대를 쓴 성녀가 스스로 고개를 옆으로 길게 젖히며, 무방비한 흰 목덜미를 내 입술 바로 앞까지 내밀었다.</p>
+<p class="p-dialogue">&quot;어서요, 루칸 경. 제 목덜미의 성혈(聖血) 한 모금이면, 사흘 동안 당신의 심장 소리를 평범한 인간의 것과 똑같이 위장할 수 있어요. 대신…… 한 번 제 피를 마시면, 그땐 그 처형인이 아니라 제 목줄을 쥐셔야 할 거예요.&quot;</p>
+<p class="p-narration">(《14층의 이단 심문관》 제5화 끝)</p>
+        </article>
+        
+
+          <!-- Bottom Pagination -->
+          <div class="reader-pagination">
+            <button class="nav-ep-btn" id="btn-prev-ep">◀ 이전화</button>
+            <span class="ep-counter" id="ep-counter-text">1 / 5 화</span>
+            <button class="nav-ep-btn" id="btn-next-ep">다음화 ▶</button>
+          </div>
+        </div>
+
+        <!-- Agent Engineering Suite (Revealed only in Agent Mode) -->
+        <div class="agent-only-block">
+          <div class="agent-suite">
+            <div class="agent-suite-title">
+              <span> AI 에이전트 설계 모드: 떡밥 원장 &amp; 호칭 매트릭스 &amp; Diff 감사</span>
+            </div>
+
+            <div class="agent-grid">
+              <!-- Foreshadow Ledger -->
+              <div class="agent-card">
+                <div class="agent-card-title">
+                  <span>공동 세계관 떡밥 원장 (Foreshadow Ledger)</span>
+                  <span class="status-badge prod">F-01 ~ F-09</span>
+                </div>
+                <table class="table-compact">
+                  <thead>
+                    <tr><th>코드</th><th>설정 및 떡밥 핵심</th><th>연계 작품</th><th>상태</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>F-01</code></td><td>시온의 은회중시계 태엽 (14분 오차)</td><td>중고상점</td><td>정합성 100%</td></tr>
+                    <tr><td><code>F-02</code></td><td>14층 연락병 동선 및 계단 이동</td><td>공통 교차</td><td>검증 완료</td></tr>
+                    <tr><td><code>F-03</code></td><td>역류하는 시약병과 14층 공명</td><td>중고상점</td><td>정합성 100%</td></tr>
+                    <tr><td><code>F-04</code></td><td>성표와 처형인의 은장도</td><td>공통 교차</td><td>검증 완료</td></tr>
+                    <tr><td><code>F-05</code></td><td>이브 쇄골 검은 백합 각인 (3단계)</td><td>이단 심문관</td><td>정합성 100%</td></tr>
+                    <tr><td><code>F-08</code></td><td>안대 쓴 성녀 세실리의 초감각 심문</td><td>이단 심문관</td><td>검증 완료</td></tr>
+                    <tr><td><code>F-09</code></td><td>거꾸로 내리는 비의 발원지와 심박 카운트다운</td><td>공통 거대 서사</td><td>설계 완료</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Character Epithet & Vocative Matrix -->
+              <div class="agent-card">
+                <div class="agent-card-title">
+                  <span>인물 수식어 절제 &amp; 관계별 대사 호칭 매트릭스</span>
+                  <span class="status-badge prod">KR-29 준수</span>
+                </div>
+                <table class="table-compact">
+                  <thead>
+                    <tr><th>관계 (화자  청자)</th><th>공식/거리감 상황</th><th>밀착/위기/감정선</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><strong>이브  루칸</strong></td><td>“심문관 나리”, “헤일 경”</td><td>“루칸”, “당신”</td></tr>
+                    <tr><td><strong>루칸  이브</strong></td><td>“이브 베스퍼”, “사형수”</td><td>“이브”, “너”</td></tr>
+                    <tr><td><strong>세드릭  루칸</strong></td><td>“헤일 심문관님”</td><td>“루칸 선배”, “선배”</td></tr>
+                    <tr><td><strong>서도 ↔ 시온</strong></td><td>“배달부 꼬마” / “사장님”</td><td>“시온아” / “아저씨”</td></tr>
+                  </tbody>
+                </table>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
+                  * 지문 규칙: 전체 수식어(예: 14층의 이단 심문관 루칸 헤일)는 1화당 첫 등장 1회만 허용하고, 이후 문맥상 이름/대명사/주어 생략으로 완전 절제.
+                </div>
+              </div>
+            </div>
+
+            <!-- Claude Humanizer Diff Summary -->
+            <div class="diff-box">
+              <div style="font-weight: 800; color: #fff; margin-bottom: 8px;">
+                ️ Claude blader/humanizer + KR-27~30 변환 Diff 요약
+              </div>
+              <div>
+                <span class="diff-line-del">시온(Shion)이 문을 열었다. [떡밥: F-01] **14층의 이단 심문관 루칸 헤일(Lucan Hale)**은 단순한 감시자가 아니라 포식자였다.</span><br/>
+                <span class="diff-line-add"> 교정: 시온이 문을 열었다. 심문실 안에서 루칸은 포식자의 눈으로 사형수를 내려다보았다.</span>
+              </div>
+              <div style="margin-top: 6px; font-size: 12px; color: var(--text-dim);">
+                • 한영 병기 0건 (KR-27) · 특수기호/볼드/태그 0건 (KR-28) · A의 B의 C 수식어 기계적 반복 해체 (KR-29) · Not X but Y (§1) 상투어 박멸
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================
+           PANEL 6: DIRECTOR DESK & APPROVAL
+           ========================================================= -->
+      <section class="studio-panel" id="panel-director">
+        <div class="panel-header-bar">
+          <h1 class="panel-title">️ 디렉터 전략 조타 &amp; Gate H3 결재 데스크</h1>
+        </div>
+
+        <!-- 4-Stage Strategic Funnel Tracker -->
+        <div class="funnel-tracker">
+          <div class="funnel-step done">
+            <div class="funnel-step-badge"></div>
+            <span>S0 레퍼런스 역설계</span>
+          </div>
+          <span class="funnel-arrow"></span>
+
+          <div class="funnel-step done">
+            <div class="funnel-step-badge"></div>
+            <span>S1-A01 정사 바이블</span>
+          </div>
+          <span class="funnel-arrow"></span>
+
+          <div class="funnel-step done">
+            <div class="funnel-step-badge"></div>
+            <span>S3 3사 교차 감사</span>
+          </div>
+          <span class="funnel-arrow"></span>
+
+          <div class="funnel-step current">
+            <div class="funnel-step-badge">●</div>
+            <span>H3 디렉터 1회 승인 대기</span>
+          </div>
+        </div>
+
+        <div class="director-grid">
+          <!-- 1-Click Approval Desk -->
+          <div class="approval-card">
+            <div class="approval-card-title">
+              <span> Gate H3 즉시 승인 데스크</span>
+              <span class="status-badge h3">3건 대기 중</span>
+            </div>
+            <p style="margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+              중간 질문이나 병목 없이, 완성된 프로덕션 패키지를 디렉터가 1클릭으로 즉시 확정·승인할 수 있습니다.
+            </p>
+
+            <button class="btn-action approve" data-copy-text="ACT-06(웹소설 중고상점 & 이단 심문관 4~5화 원고 및 플랫폼 1~5화 정식 런칭) 컨펌할게. 바로 실행해줘." data-copy-label="ACT-06 승인">
+               ACT-06 (웹소설 1~5화 정식 런칭 컨펌 복사)
+            </button>
+
+            <button class="btn-action approve" data-copy-text="ACT-07(The Stoic Shadow 쇼츠 v3 EP01~02 유튜브 업로드 및 EP03~04 렌더) 컨펌할게. 바로 실행해줘." data-copy-label="ACT-07 승인">
+               ACT-07 (The Stoic Shadow 쇼츠 v3 업로드 컨펌 복사)
+            </button>
+
+            <button class="btn-action approve" data-copy-text="ACT-08(참여형 수칙 괴담 1호 쇼츠 v3 편성 및 고정댓글 수칙 투하) 컨펌할게. 바로 실행해줘." data-copy-label="ACT-08 승인">
+               ACT-08 (참여형 수칙 괴담 1호 편성 컨펌 복사)
+            </button>
+          </div>
+
+          <!-- Creative Direction Prompt Builder -->
+          <div class="prompt-builder-card">
+            <div style="font-weight: 800; font-size: 14px; color: #fff;">
+               전략 디렉팅 프롬프트 빌더 (조타 콘솔)
+            </div>
+
+            <div class="form-row">
+              <label class="form-label" for="dir-channel-select">대상 채널</label>
+              <select class="form-select" id="dir-channel-select">
+                <option value="CH-03 The Stoic Shadow">CH-03 The Stoic Shadow</option>
+                <option value="CH-04 Anomaly Rules Horror">CH-04 Anomaly Rules Horror</option>
+                <option value="CH-05 탑 안의 유일한 중고상점">CH-05 탑 안의 유일한 중고상점</option>
+                <option value="CH-06 14층의 이단 심문관">CH-06 14층의 이단 심문관</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label class="form-label" for="dir-gate-select">결재 게이트</label>
+              <select class="form-select" id="dir-gate-select">
+                <option value="H3 완본 최종 컨펌">H3 완본 최종 컨펌</option>
+                <option value="S3.5 시청각 미학 게이트">S3.5 시청각 미학 게이트</option>
+                <option value="S0 레퍼런스 보강">S0 레퍼런스 보강</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label class="form-label">중점 조정 지시</label>
+              <div class="checkbox-grid">
+                <label class="check-label"><input type="checkbox" class="dir-tag-check" value="35mm 필름 그레인 강화" /> 35mm 필름 그레인</label>
+                <label class="check-label"><input type="checkbox" class="dir-tag-check" value="VHS 주사선 고증 준수" /> VHS 주사선 고증</label>
+                <label class="check-label"><input type="checkbox" class="dir-tag-check" value="인물 호칭 텐션 극대화" /> 인물 호칭 텐션</label>
+                <label class="check-label"><input type="checkbox" class="dir-tag-check" value="고정댓글 수칙 참여 보강" /> 고정댓글 수칙 참여</label>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label class="form-label" for="dir-custom-note">디렉터 상세 메모</label>
+              <textarea class="form-textarea" id="dir-custom-note" placeholder="추가 디렉팅 지시사항을 입력하세요..."></textarea>
+            </div>
+
+            <button class="btn-action" id="build-director-prompt-btn" style="background:#00d2ff; color:#0b0c10; font-weight:800; border:none; padding:10px;">
+               디렉터 전략 지시문 생성 &amp; 복사
+            </button>
+
+            <div class="generated-prompt-box" id="dir-generated-prompt">
+              생성된 전략 지시문이 여기에 표시됩니다.
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Interactive Detail Inspector Modal -->
+  <div class="mcr-modal-backdrop" id="asset-modal">
+    <div class="mcr-modal-container">
+      <div class="mcr-modal-head">
+        <span class="mcr-modal-title" id="modal-title">에셋 상세 인스펙터</span>
+        <button class="mcr-modal-close" id="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-media-wrap" id="modal-media-wrap">
+        <!-- Dynamic media preview -->
+      </div>
+      <div class="mcr-modal-body">
+        <div class="modal-meta-row">
+          <span class="modal-meta-k">카테고리</span>
+          <span id="modal-cat" style="color:#fff; font-weight:700;">-</span>
+        </div>
+        <div class="modal-meta-row">
+          <span class="modal-meta-k">규격 및 포맷</span>
+          <span id="modal-spec" style="color:var(--text-muted);">-</span>
+        </div>
+        <div class="modal-meta-row">
+          <span class="modal-meta-k">파일 절대 경로</span>
+          <div class="modal-meta-v" id="modal-path">-</div>
+        </div>
+        <div class="modal-meta-row">
+          <span class="modal-meta-k">연속성(Continuity) 검증 노트</span>
+          <div style="font-size:12px; color:#34d399; line-height:1.5;" id="modal-continuity">-</div>
+        </div>
+        <div class="modal-meta-row">
+          <span class="modal-meta-k">타겟 배포 플랫폼</span>
+          <div style="font-size:12px; color:#fbbf24;" id="modal-platform">-</div>
+        </div>
+        <button class="btn-action approve" id="modal-copy-path-btn" style="margin-top:8px;">
+           파일 절대 경로 복사
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Element -->
+  <div class="mcr-toast" id="mcr-toast"></div>
+
+  <!-- External Controller (Strict CSP Compliance) -->
+  <script src="./app.js"></script>
+</body>
+</html>

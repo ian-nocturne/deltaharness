@@ -118,20 +118,25 @@ runs:
         if mode in ("rescue", "all"):
             rescue_res = build_rescue_bundle(repo_path, write_files=False)
             blockers = rescue_res.get("blockers", [])
+            readiness = rescue_res.get("summary", {}).get("readiness", "")
             crit_high = sum(1 for b in blockers if b.get("severity") in ("critical", "high"))
             blocking_findings += crit_high
             total_findings += len(blockers)
-            if not rescue_res.get("ok", True) or crit_high > 0:
+            if not rescue_res.get("ok", True) or readiness != "STATIC_CHECKS_PASSED" or len(blockers) > 0:
+                if crit_high == 0:
+                    blocking_findings += len(blockers) or 1
                 has_blocker = True
             summary_lines.append(rescue_res.get("rescueBriefMarkdown", ""))
 
         if mode in ("anti-slop", "all"):
-            slop_res = scan_anti_slop(repo_path)
-            slop_score = slop_res.get("slopScore", 0)
+            slop_res = scan_anti_slop(repo_path, max_findings=0)
+            raw_slop = slop_res.get("slopScore")
+            slop_score = 0 if raw_slop is None else int(raw_slop)
             slop_findings = slop_res.get("findings", [])
-            total_findings += len(slop_findings)
-            if not slop_res.get("ok", True) or slop_score >= 20:
-                blocking_findings += len(slop_findings) or 1
+            slop_total = int(slop_res.get("totalFindingCount", len(slop_findings)))
+            total_findings += slop_total
+            if not slop_res.get("ok", True) or slop_res.get("grade") == "UNVERIFIED" or slop_score >= 20 or slop_total > 0:
+                blocking_findings += slop_total or 1
                 has_blocker = True
             summary_lines.append(slop_res.get("markdownReport", ""))
 

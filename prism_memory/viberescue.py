@@ -128,6 +128,10 @@ ENABLE_RLS_RE = re.compile(
     r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:[A-Za-z0-9_\"']+\.)?([A-Za-z0-9_\"']+)\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY",
     re.IGNORECASE,
 )
+ALTER_RLS_RE = re.compile(
+    r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:[A-Za-z0-9_\"']+\.)?([A-Za-z0-9_\"']+)\s+(ENABLE|DISABLE)\s+ROW\s+LEVEL\s+SECURITY",
+    re.IGNORECASE,
+)
 CREATE_POLICY_ON_RE = re.compile(
     r"CREATE\s+POLICY\s+[\s\S]*?\bON\s+(?:[A-Za-z0-9_\"']+\.)?([A-Za-z0-9_\"']+)",
     re.IGNORECASE,
@@ -368,10 +372,13 @@ def build_rescue_bundle(
     # Cross-file SQL migration state aggregation
     sql_created_tables: Dict[str, Tuple[str, int]] = {}
     sql_rls_enabled_tables: Set[str] = set()
+    sql_rls_disabled_tables: Dict[str, Tuple[str, int]] = {}
     sql_policy_tables: Set[str] = set()
 
+    from .code_anchors import _blank_js_comments_preserve_lines
+
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS and not d.startswith(".git")]
+        dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDED_DIRS and not d.startswith(".git"))
         for fname in sorted(filenames):
             fpath = Path(dirpath) / fname
             if fpath.is_symlink():
@@ -385,9 +392,18 @@ def build_rescue_bundle(
                 except OSError:
                     continue
                 clean_content = _strip_code_comments_preserve_lines(raw_content, ext)
+                if ext != ".py":
+                    no_str_content, _ = _blank_js_comments_preserve_lines(raw_content, blank_strings=True)
+                    no_str_lines = no_str_content.splitlines()
+                else:
+                    no_str_lines = clean_content.splitlines()
                 is_client = _is_client_side_file(rel, clean_content)
                 for lineno, line in enumerate(clean_content.splitlines(), start=1):
+                    ns_line = no_str_lines[lineno - 1] if lineno - 1 < len(no_str_lines) else line
                     for m in PROCESS_ENV_RE.finditer(line):
+                        # Ignore matches where `process.env` / `import.meta.env` itself is inside a string literal
+                        if m.start() < len(ns_line) and not ns_line[m.start():m.start() + 6].strip():
+                            continue
                         key = m.group(1) or m.group(2)
                         if not key:
                             continue
@@ -408,7 +424,7 @@ def build_rescue_bundle(
                         if key and key not in BUILTIN_ENV_KEYS:
                             code_env_refs.setdefault(key, []).append(f"{rel}:{lineno}")
 
-            # 3. Collect SQL tables, RLS enablement, and policies across all .sql files (after stripping SQL comments)
+            # 3. Collect SQL tables, RLS enablement/disablement, and policies across all .sql files (after stripping SQL comments)
             if ext == ".sql":
                 scanned_sql_files += 1
                 try:
@@ -421,10 +437,17 @@ def build_rescue_bundle(
                     if t_name and t_name not in sql_created_tables:
                         line_no = clean_sql[:m_ct.start()].count("\n") + 1
                         sql_created_tables[t_name] = (rel, line_no)
-                for m_rls in ENABLE_RLS_RE.finditer(clean_sql):
+                for m_rls in ALTER_RLS_RE.finditer(clean_sql):
                     t_name = m_rls.group(1).strip("\"'").lower()
+                    action_kw = m_rls.group(2).upper()
                     if t_name:
-                        sql_rls_enabled_tables.add(t_name)
+                        if action_kw == "ENABLE":
+                            sql_rls_enabled_tables.add(t_name)
+                            sql_rls_disabled_tables.pop(t_name, None)
+                        else:
+                            sql_rls_enabled_tables.discard(t_name)
+                            line_no = clean_sql[:m_rls.start()].count("\n") + 1
+                            sql_rls_disabled_tables[t_name] = (rel, line_no)
                 for m_pol in CREATE_POLICY_ON_RE.finditer(clean_sql):
                     t_name = m_pol.group(1).strip("\"'").lower()
                     if t_name:
@@ -443,12 +466,13 @@ def build_rescue_bundle(
                     })
 
     # Evaluate cross-migration SQL RLS state
-    if sql_created_tables:
+    if sql_created_tables or sql_rls_disabled_tables:
         unprotected_by_file: Dict[Tuple[str, int], List[str]] = {}
         rls_without_policy_by_file: Dict[Tuple[str, int], List[str]] = {}
         for t_name, (rel_f, ln_no) in sorted(sql_created_tables.items()):
             if t_name not in sql_rls_enabled_tables:
-                unprotected_by_file.setdefault((rel_f, ln_no), []).append(t_name)
+                loc = sql_rls_disabled_tables.get(t_name, (rel_f, ln_no))
+                unprotected_by_file.setdefault(loc, []).append(t_name)
             elif t_name not in sql_policy_tables:
                 rls_without_policy_by_file.setdefault((rel_f, ln_no), []).append(t_name)
         for (rel_f, ln_no), tbls in sorted(unprotected_by_file.items()):
@@ -458,8 +482,8 @@ def build_rescue_bundle(
                 "file": rel_f,
                 "line": ln_no,
                 "tables": tbls,
-                "message": f"SQL schema creates table(s) `{', '.join(tbls)}` (in `{rel_f}:{ln_no}`) without `ENABLE ROW LEVEL SECURITY` across migrations.",
-                "fixHint": f"Add `ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;` and explicit `auth.uid()` policies for `{', '.join(tbls)}`.",
+                "message": f"SQL schema leaves table(s) `{', '.join(tbls)}` (at `{rel_f}:{ln_no}`) with Row Level Security disabled or missing across migrations.",
+                "fixHint": f"Ensure `ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;` remains enabled and explicit `auth.uid()` policies exist for `{', '.join(tbls)}`.",
             })
         for (rel_f, ln_no), tbls in sorted(rls_without_policy_by_file.items()):
             blockers.append({
@@ -553,7 +577,7 @@ def build_rescue_bundle(
     elif critical_count == 0 and unverified_env_keys:
         readiness = "ENV_UNVERIFIED"
         complexity = "NEEDS_ENV_VERIFICATION"
-        exit_code = 0
+        exit_code = 1
     elif critical_count == 0 and warning_count == 0:
         readiness = "STATIC_CHECKS_PASSED"
         complexity = "NONE"
@@ -561,7 +585,7 @@ def build_rescue_bundle(
     elif critical_count == 0:
         readiness = "STATIC_CHECKS_WITH_WARNINGS"
         complexity = "LOW"
-        exit_code = 0
+        exit_code = 1
     elif critical_count <= 2 and len(blockers) <= 5:
         readiness = "BLOCKED"
         complexity = "LOW_TO_MEDIUM"
@@ -573,6 +597,11 @@ def build_rescue_bundle(
 
     elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
     bundle_id = hashlib.sha256(f"{root}:{git_info.get('headSha')}:{len(blockers)}".encode("utf-8")).hexdigest()[:12]
+
+    out_root = Path(output_dir).expanduser().resolve() if output_dir else root
+    brief_path = out_root / "RESCUE_BRIEF.md"
+    prompt_path = out_root / "ONE_PROMPT_RESCUE.md"
+    json_path = out_root / "rescue-bundle.json"
 
     raw_bundle: Dict[str, Any] = {
         "ok": exit_code == 0,
@@ -610,8 +639,14 @@ def build_rescue_bundle(
         },
         "blockers": blockers,
     }
+    if write_files:
+        raw_bundle["writtenFiles"] = {
+            "rescueBrief": str(brief_path),
+            "onePromptRescue": str(prompt_path),
+            "rescueBundleJson": str(json_path),
+        }
 
-    # Apply recursive secret scrubbing across all fields before formatting or serializing
+    # Apply recursive secret scrubbing across all fields (including writtenFiles) before formatting or serializing
     bundle: Dict[str, Any] = _scrub_recursive(raw_bundle)
     bundle["rescueBriefMarkdown"] = mask_sensitive_text(format_rescue_markdown(bundle))
     bundle["onePromptRescueMarkdown"] = mask_sensitive_text(format_one_prompt_rescue(bundle))
@@ -628,20 +663,11 @@ def build_rescue_bundle(
     )
 
     if write_files:
-        out_root = Path(output_dir).expanduser().resolve() if output_dir else root
         out_root.mkdir(parents=True, exist_ok=True)
-        brief_path = out_root / "RESCUE_BRIEF.md"
-        prompt_path = out_root / "ONE_PROMPT_RESCUE.md"
-        json_path = out_root / "rescue-bundle.json"
         brief_path.write_text(bundle["rescueBriefMarkdown"], encoding="utf-8")
         prompt_path.write_text(bundle["onePromptRescueMarkdown"], encoding="utf-8")
         serializable = {k: v for k, v in bundle.items() if k not in ("rescueBriefMarkdown", "onePromptRescueMarkdown")}
         json_path.write_text(json.dumps(serializable, indent=2, ensure_ascii=False), encoding="utf-8")
-        bundle["writtenFiles"] = {
-            "rescueBrief": str(brief_path),
-            "onePromptRescue": str(prompt_path),
-            "rescueBundleJson": str(json_path),
-        }
 
     if output_format == "markdown":
         bundle["formatted"] = bundle["rescueBriefMarkdown"]
@@ -794,12 +820,7 @@ def cli(argv: Optional[List[str]] = None) -> int:
             print(res["rescueBriefMarkdown"])
         if exit_zero:
             return 0
-        readiness = res.get("summary", {}).get("readiness", "")
-        if readiness == "NO_TARGETS_FOUND":
-            return 2
-        if res.get("summary", {}).get("criticalCount", 0) > 0 or res.get("summary", {}).get("totalBlockers", 0) > 0:
-            return 1
-        return 0
+        return int(res.get("exitCode", 1))
     except Exception as exc:
         print(json.dumps({"ok": False, "error": str(exc), "type": type(exc).__name__}, ensure_ascii=False), file=sys.stderr)
         return 2

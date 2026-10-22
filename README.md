@@ -84,16 +84,16 @@ Tested against 4 full public AI repositories at `HEAD` (see `real-oss-audit-resu
 
 | Repository (`HEAD`) | Scanned Docs | References Checked | Errors Found | Verification Summary |
 | :--- | :---: | :---: | :---: | :--- |
-| `vercel/ai` (`e741656`) | 17 (`AGENTS.md`, `CONTRIBUTING.md`, `skills/**`) | 149 | **3 (`missing_path`)** | Detects 3 real stale paths (`AGENTS.md:94` & `CONTRIBUTING.md:86` → `src/stream-text/openai.ts`; `skills/develop-ai-functions-example/SKILL.md:47` → `generate-text/openai.ts`) with **0 false positives** across monorepo workspace scripts and JS regex utilities. |
-| `openai/openai-agents-python` (`64cd5df`) | 414 (`AGENTS.md`, `docs/**`) | 1,164 | **0** | `Makefile` targets, `pyproject.toml`, and 414 multi-language docs resolve with **0 false positives**. |
-| `Significant-Gravitas/AutoGPT` (`8d4a965`) | 351 (`CLAUDE.md`, `AGENTS.md`, `.claude/skills/**`, `docs/**`) | 1,476 | **14 (`missing_path`)** | Detects 14 real deleted/moved paths (e.g., `.github/copilot-instructions.md:173` → `frontend/lib/supabase/middleware.ts`, `autogpt_platform/backend/AGENTS.md:135` → `tools/release.py`, `docs/AGENTS.md:18` → `docs/integrations/basic.md`) with **0 false positives**. |
+| `vercel/ai` (`e741656`) | 17 (`AGENTS.md`, `CONTRIBUTING.md`, `skills/**`) | 150 | **1 (`missing_path`)** | Detects 1 real stale path (`CONTRIBUTING.md:86` → `src/stream-text/openai.ts`, refactored to `src/stream-text/openai/basic.ts`) while suppressing negative examples (`Do not create...`) and resolving monorepo workspace scripts with **0 false positives**. |
+| `openai/openai-agents-python` (`64cd5df`) | 414 (`AGENTS.md`, `docs/**`) | 1,161 | **0** | `Makefile` targets, `pyproject.toml`, and 414 multi-language docs resolve with **0 false positives**. |
+| `Significant-Gravitas/AutoGPT` (`8d4a965`) | 351 (`CLAUDE.md`, `AGENTS.md`, `.claude/skills/**`, `docs/**`) | 1,432 | **9 (`missing_path`)** | Detects 9 real deleted/moved paths (e.g., `.github/copilot-instructions.md:173` → `frontend/lib/supabase/middleware.ts`, `docs/AGENTS.md:18` → `docs/integrations/basic.md`, `docs/content/forge/get-started.md:22` → `classic/forge/agent/forge_agent.py`, `.claude/skills/vercel-react-best-practices/SKILL.md:114` → `rules/_sections.md`) while suppressing external-repo and code-fence `title=` examples with **0 false positives**. |
 | `anthropics/claude-code` (`d014fc0`) | 2 (`CLAUDE.md`, `README.md`) | 2 | **0** | Resolves `.github/workflows/claude.yml` and repository instructions with **0 false positives**. |
 
 ---
 
 ## 🔍 Scope & Static Analysis Boundaries
 
-DeltaHarness is a **fast, deterministic, zero-network static analyzer** (`< 50ms` per repo). Knowing what it checks—and what requires a runtime test runner—keeps CI gates trustworthy:
+DeltaHarness is a **fast, deterministic, zero-network static analyzer** (`~10–60ms` on typical repos; `~0.4–5s` on 350+ doc monorepos). Knowing what it checks—and what requires a runtime test runner—keeps CI gates trustworthy:
 
 | Capability | Static Method Used | Known Boundary |
 | :--- | :--- | :--- |

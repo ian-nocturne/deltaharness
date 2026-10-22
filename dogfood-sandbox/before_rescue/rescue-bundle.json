@@ -1,0 +1,120 @@
+{
+  "ok": true,
+  "bundleId": "rescue-e2f9b41fdc28",
+  "repoName": "dogfood-sandbox",
+  "repoPath": "<workspace>/dogfood-sandbox",
+  "scannedCodeFiles": 1,
+  "elapsedMs": 31.04,
+  "secretSafety": {
+    "rawEnvValuesIncluded": false,
+    "redactionPolicy": "strict_keys_only"
+  },
+  "stack": {
+    "languages": [
+      "Unknown"
+    ],
+    "frameworks": [],
+    "database": [],
+    "npmScripts": []
+  },
+  "git": {
+    "isGitRepo": false,
+    "branch": null,
+    "headSha": null,
+    "dirtyFileCount": 0,
+    "modifiedFiles": []
+  },
+  "deployConfigs": [],
+  "presentLockfiles": [
+    "package-lock.json",
+    "pnpm-lock.yaml"
+  ],
+  "envAudit": {
+    "envFilesDetected": [
+      ".env.local",
+      ".env.example"
+    ],
+    "requiredKeys": [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET"
+    ],
+    "activeSetKeyCount": 2,
+    "missingOrEmptyKeys": [
+      {
+        "key": "STRIPE_WEBHOOK_SECRET",
+        "referencedAt": [
+          "client.js:4"
+        ]
+      }
+    ]
+  },
+  "summary": {
+    "readiness": "HIGH_RISK_HANDOFF_RECOMMENDED",
+    "estimatedComplexity": "HIGH_RESCUE_OR_HANDOFF",
+    "totalBlockers": 6,
+    "criticalCount": 5,
+    "warningCount": 1
+  },
+  "blockers": [
+    {
+      "kind": "client_secret_exposure",
+      "severity": "critical",
+      "file": "client.js",
+      "line": 3,
+      "key": "STRIPE_SECRET_KEY",
+      "message": "Server secret `STRIPE_SECRET_KEY` is referenced inside client-side file `client.js:3`.",
+      "fixHint": "Move `STRIPE_SECRET_KEY` usage to a server route/action (`app/api/...` or server component) and never expose it with `NEXT_PUBLIC_` or `VITE_`."
+    },
+    {
+      "kind": "client_secret_exposure",
+      "severity": "critical",
+      "file": "client.js",
+      "line": 4,
+      "key": "STRIPE_WEBHOOK_SECRET",
+      "message": "Server secret `STRIPE_WEBHOOK_SECRET` is referenced inside client-side file `client.js:4`.",
+      "fixHint": "Move `STRIPE_WEBHOOK_SECRET` usage to a server route/action (`app/api/...` or server component) and never expose it with `NEXT_PUBLIC_` or `VITE_`."
+    },
+    {
+      "kind": "supabase_rls_or_auth_gap",
+      "severity": "critical",
+      "file": "migrations/001_init.sql",
+      "line": 1,
+      "tables": [
+        "orders"
+      ],
+      "message": "SQL migration `migrations/001_init.sql` creates table(s) `orders` without `ENABLE ROW LEVEL SECURITY`.",
+      "fixHint": "Add `ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;` and explicit `auth.uid()` policies in `migrations/001_init.sql`."
+    },
+    {
+      "kind": "missing_env_key",
+      "severity": "critical",
+      "file": "client.js",
+      "line": 4,
+      "key": "STRIPE_WEBHOOK_SECRET",
+      "message": "Environment variable `STRIPE_WEBHOOK_SECRET` is required by `client.js:4` but is missing or empty in local `.env`/`.env.local`.",
+      "fixHint": "Set `STRIPE_WEBHOOK_SECRET` in `.env.local` and in your hosting provider's Environment Variables settings (Vercel/Netlify/Supabase)."
+    },
+    {
+      "kind": "competing_lockfiles",
+      "severity": "warning",
+      "file": "package-lock.json",
+      "line": 1,
+      "lockfiles": [
+        "package-lock.json",
+        "pnpm-lock.yaml"
+      ],
+      "message": "Multiple competing lockfiles detected: `package-lock.json, pnpm-lock.yaml`.",
+      "fixHint": "Keep only ONE lockfile matching your deployment package manager so Vercel/Netlify does not install mismatched dependency trees."
+    },
+    {
+      "kind": "instruction_drift:missing_path",
+      "severity": "critical",
+      "file": "CLAUDE.md",
+      "line": 2,
+      "target": "src/legacy_server.py",
+      "message": "`CLAUDE.md:2`에서 참조한 파일 `src/legacy_server.py`를 저장소에서 찾을 수 없어요.",
+      "fixHint": "삭제되었거나 이동된 경로 `src/legacy_server.py`를 최신 파일 경로로 교체하세요."
+    }
+  ]
+}
