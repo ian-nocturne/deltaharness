@@ -152,14 +152,32 @@
     }
   },
   "opsec_audit_receipt": {
-    "incident_status": "RESOLVED_AND_VERIFIED",
-    "verified_at_kst": "2026-10-23T01:35:00+09:00",
+    "incident_status": "CONTAINED_SELF_ATTESTED_PENDING_INDEPENDENT_EVIDENCE",
+    "evidence_level": {
+      "machine_verified": [
+        "opsec-check scan of the public release folders (0 findings, exit 0)",
+        "opsec-check reads canon fingerprint hashes (synthetic canary detected)"
+      ],
+      "self_attested_by_operator": [
+        "credential revocation",
+        "credential rotation time",
+        "public remote history never contained the credential"
+      ],
+      "not_independently_verified": [
+        "provider-side revocation log",
+        "remote git history scan by a third party"
+      ],
+      "previous_status_label": "RESOLVED_AND_VERIFIED",
+      "downgraded_reason": "Round 3 audit B18/checklist-108: receipt was self-declared without independent raw evidence."
+    },
+    "recorded_at_kst": "2026-10-23T01:35:00+09:00",
     "bootstrap_credential_rotation": {
       "compromised_draft_credential_revoked": true,
       "rotated_at_kst": "2026-10-22T22:40:00+09:00",
       "storage_location": "OS_KEYCHAIN_AND_BROWSER_SESSION_ONLY",
       "plaintext_in_workspace_files": 0,
-      "ever_pushed_to_public_remote": false
+      "ever_pushed_to_public_remote": false,
+      "attestation": "operator_self_attested"
     },
     "public_git_history_audit": {
       "audited_repositories": [
@@ -168,7 +186,13 @@
       ],
       "scanner_command": "deltaharness opsec-check",
       "finding_count": 0,
-      "exit_code": 0
-    }
+      "exit_code": 0,
+      "attestation": "operator_reported_scan_result"
+    },
+    "user_actions_to_close": [
+      "Attach provider revocation screenshot or log ID (no secret values)",
+      "Run `memory_cli.py opsec-fingerprint` locally to verify canon fingerprints against real identifiers",
+      "Run `opsec-check --history` on the public remote clone and attach the JSON output"
+    ]
   }
 }

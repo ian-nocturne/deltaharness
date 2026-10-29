@@ -123,6 +123,7 @@ def _node_call_signature(node):
             "hasVararg": has_vararg,
             "hasKwarg": has_kwarg,
         })
+        sig_payload["line"] = int(getattr(node, "lineno", 0) or 0)
         return sig_payload
     if isinstance(node, ast.ClassDef):
         methods = sorted({
@@ -159,6 +160,7 @@ def _node_call_signature(node):
             "kwonlyReq": sig_payload["kwonlyReq"],
             "kwonlyAll": sig_payload["kwonlyAll"],
         })
+        sig_payload["line"] = int(getattr(node, "lineno", 0) or 0)
         return sig_payload
     return None
 
@@ -315,6 +317,9 @@ def _blank_js_comments_preserve_lines(text: str, *, blank_strings: bool = False)
     syntax_ok = True
     last_non_ws = ""
     last_word = ""
+    ctrl_parens: list[bool] = []  # one flag per open "(": opened right after if/while/for/with
+    block_braces: list[bool] = []  # one flag per open "{": True = statement block, False = object literal
+    regex_after_ctrl = False      # a `/` right after `if (...)` starts a regex, not a division
 
     while i < n:
         ch = text[i]
@@ -366,6 +371,15 @@ def _blank_js_comments_preserve_lines(text: str, *, blank_strings: bool = False)
             continue
 
         if in_str is not None:
+            if in_str == "`" and ch == "$" and nxt == "{":
+                # Template interpolation `${ ... }` is executable code, never string content.
+                out.append("${")
+                stack.append("${")
+                in_str = None
+                last_non_ws = "{"
+                last_word = ""
+                i += 2
+                continue
             if ch == "\\" and i + 1 < n:
                 out.append("  " if blank_strings else text[i:i + 2])
                 i += 2
@@ -403,11 +417,13 @@ def _blank_js_comments_preserve_lines(text: str, *, blank_strings: bool = False)
             and (
                 not last_non_ws
                 or last_non_ws in "=(,:[!&|?{;~+-*%^"
-                or last_word in ("return", "case", "throw", "delete", "void", "typeof", "yield", "await")
+                or last_word in ("return", "case", "throw", "delete", "void", "typeof", "yield", "await", "in", "of", "new", "else", "do")
+                or regex_after_ctrl
             )
         ):
             in_regex = True
             in_regex_class = False
+            regex_after_ctrl = False
             out.append("/")
             i += 1
             continue
@@ -418,13 +434,36 @@ def _blank_js_comments_preserve_lines(text: str, *, blank_strings: bool = False)
             i += 1
             continue
 
+        if ch == "}" and stack and stack[-1] == "${":
+            stack.pop()
+            out.append("}")
+            in_str = "`"
+            i += 1
+            continue
+
+        closed_ctrl = False
         if ch in ("(", "{", "["):
+            if ch == "(":
+                ctrl_parens.append(last_word in ("if", "while", "for", "with"))
+            elif ch == "{":
+                # Block if it follows `)`, `;`, `{`, `}`, `=>`, start of input, or else/do/try/finally;
+                # otherwise (after `=`, `(`, `,`, `:`, `return`, `?` ...) it is an object literal.
+                k = i - 1
+                while k >= 0 and text[k].isspace():
+                    k -= 1
+                prev = text[k] if k >= 0 else ""
+                arrow = prev == ">" and k >= 1 and text[k - 1] == "="
+                block_braces.append(prev in ("", ")", ";", "{", "}") or arrow or last_word in ("else", "do", "try", "finally"))
             stack.append(ch)
         elif ch in (")", "}", "]"):
             if not stack or stack[-1] != pairs[ch]:
                 syntax_ok = False
             else:
                 stack.pop()
+                if ch == ")" and ctrl_parens:
+                    closed_ctrl = ctrl_parens.pop()
+                elif ch == "}" and block_braces:
+                    closed_ctrl = block_braces.pop()  # a `/` after a closed statement block starts a regex
 
         if ch.isalpha() or ch in ("_", "$"):
             # Track identifier words for `return /regex/`
@@ -433,6 +472,7 @@ def _blank_js_comments_preserve_lines(text: str, *, blank_strings: bool = False)
                 j += 1
             last_word = text[i:j]
             last_non_ws = text[j - 1]
+            regex_after_ctrl = False
             out.append(text[i:j])
             i = j
             continue
@@ -440,6 +480,7 @@ def _blank_js_comments_preserve_lines(text: str, *, blank_strings: bool = False)
         if not ch.isspace():
             last_non_ws = ch
             last_word = ""
+            regex_after_ctrl = closed_ctrl
         out.append(ch)
         i += 1
 
@@ -491,17 +532,53 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
     src_text, syntax_ok = _blank_js_comments_preserve_lines(raw_src_text, blank_strings=True)
     sigs = {}
 
+    def _line_of(idx: int) -> int:
+        # Skip leading whitespace/newlines consumed by `^[ \t]*` so the line points at the declaration itself.
+        while idx < len(src_text) and src_text[idx] in " \t\r\n":
+            idx += 1
+        return src_text.count("\n", 0, idx) + 1
+
     # 1. Standard function declarations: [export] [default] [async] function Name[<T>](params)
     func_pat = re.compile(
-        r"(?m)^[ \t]*(?:export[ \t]+)?(?:default[ \t]+)?(?:declare[ \t]+)?(async[ \t]+)?function[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?:<[^>({\n]*>)?[ \t]*\(([^)]*)\)"
+        r"(?m)^[ \t]*(?:export[ \t]+)?(default[ \t]+)?(?:declare[ \t]+)?(async[ \t]+)?function[ \t]*\*?[ \t]+([A-Za-z_$][A-Za-z0-9_$]*)[ \t]*(?:<[^>({\n]*>)?[ \t]*\(([^)]*)\)"
     )
     for m in func_pat.finditer(src_text):
-        is_async = bool(m.group(1))
-        name = m.group(2)
-        raw_params = m.group(3) or ""
+        is_default = bool(m.group(1))
+        is_async = bool(m.group(2))
+        name = m.group(3)
+        raw_params = m.group(4) or ""
         brace_pos = src_text.find("{", m.end())
         body_block = _extract_brace_block(src_text, brace_pos) if brace_pos != -1 else m.group(0)
-        sigs[name] = _build_ts_func_sig(is_async, raw_params, body_block)
+        sig = _build_ts_func_sig(is_async, raw_params, body_block)
+        sig["line"] = _line_of(m.start())
+        sigs[name] = sig
+        if is_default and re.match(r"[ \t]*export\b", src_text[m.start():].lstrip("\n")):
+            sigs["default"] = sig
+
+    # 1b. Anonymous default exports: `export default function(...)`, `export default async (...) =>`, `export default x =>`
+    anon_default_pat = re.compile(
+        r"(?m)^[ \t]*export[ \t]+default[ \t]+(?:(async[ \t]+)?function[ \t]*\*?[ \t]*(?:<[^>({\n]*>)?[ \t]*\(([^)]*)\)"
+        r"|(async[ \t]+)?(?:<[^>({\n]*>\s*)?(?:\(([^)]*)\)|([A-Za-z_$][A-Za-z0-9_$]*))\s*(?::[^=\n>]+)?=>)"
+    )
+    for m in anon_default_pat.finditer(src_text):
+        if "default" in sigs:
+            break
+        is_async = bool(m.group(1) or m.group(3))
+        if m.group(2) is not None:
+            raw_params = m.group(2)
+        elif m.group(4) is not None:
+            raw_params = m.group(4)
+        else:
+            raw_params = m.group(5) or ""
+        rest = src_text[m.end():].lstrip()
+        if rest.startswith("{"):
+            brace_pos = src_text.find("{", m.end())
+            body_block = _extract_brace_block(src_text, brace_pos)
+        else:
+            body_block = rest.splitlines()[0] if rest else m.group(0)
+        sig = _build_ts_func_sig(is_async, raw_params, body_block)
+        sig["line"] = _line_of(m.start())
+        sigs["default"] = sig
 
     # 2. Arrow function / function expression assignments (supports both `(a, b) =>` and single-identifier `x =>`)
     arrow_pat = re.compile(
@@ -517,7 +594,9 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
             body_block = _extract_brace_block(src_text, brace_pos)
         else:
             body_block = rest.splitlines()[0] if rest else m.group(0)
-        sigs[name] = _build_ts_func_sig(is_async, raw_params, body_block)
+        sig = _build_ts_func_sig(is_async, raw_params, body_block)
+        sig["line"] = _line_of(m.start())
+        sigs[name] = sig
 
     # 2b. React / generic HOC wrappers (supports single or nested `memo(forwardRef(...))`, `withAuth(...)`, multiline)
     hoc_pat = re.compile(
@@ -537,6 +616,7 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
         brace_pos = src_text.find("{", m.end())
         body_block = _extract_brace_block(src_text, brace_pos) if brace_pos != -1 else m.group(0)
         sig = _build_ts_func_sig(fn_async, raw_params, body_block)
+        sig["line"] = _line_of(m.start())
         if var_name:
             sigs[var_name] = sig
         if fn_name:
@@ -566,6 +646,7 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
             m_brace = cls_block.find("{", mm.end() - 1)
             m_body = _extract_brace_block(cls_block, m_brace) if m_brace != -1 else mm.group(0)
             msig = _build_ts_func_sig(m_async, m_params, m_body)
+            msig["line"] = _line_of(brace_pos + mm.start())
             if m_name == "constructor":
                 ctor_sig = msig
                 continue
@@ -596,6 +677,7 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
             "reqArgs": cls_sig["reqArgs"],
             "allArgs": cls_sig["allArgs"],
         })
+        cls_sig["line"] = _line_of(cm.start())
         sigs[cls_name] = cls_sig
 
     for short_name, entries in by_short_method.items():
@@ -651,6 +733,7 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
             "reqArgs": req_fields,
             "allArgs": all_fields,
         })
+        isig["line"] = _line_of(im.start())
         sigs[iface_name] = isig
 
     # 5. Type aliases: [export] type Name = ...
@@ -677,6 +760,7 @@ def _extract_ts_js_signatures(raw_src_text: str) -> Tuple[bool, dict]:
             "normAstHash": _sha256_text(rhs),
             "sigHash": _sha256_text(rhs),
         }
+        tsig["line"] = _line_of(tm.start())
         sigs[tname] = tsig
 
     return syntax_ok, sigs

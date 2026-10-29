@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "prism-memory"
+name = "memlet"
 version = "8.4.0"
-description = "DeltaHarness (PRISM Memory) — Zero-Setup Instruction Drift Auditor, Bitemporal Skill Engine & VibeRescue Kit"
+description = "Memlet (formerly Ieum Memory / DeltaHarness / PRISM Memory) — code-anchored agent memory: zero-daemon init, AST-anchored Markdown wiki, instruction drift checker, bitemporal skill engine & VibeRescue kit"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {file = "LICENSE"}
+license = "Apache-2.0"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 authors = [
     {name = "DeltaHarness Architecture Team"}
 ]
@@ -22,6 +23,10 @@ semantic = [
 ]
 
 [project.scripts]
+memlet = "memory_cli:cli"
+memlet-mcp = "prism_memory_mcp:main"
+ieum-memory = "memory_cli:cli"
+ieum-memory-mcp = "prism_memory_mcp:main"
 prism-memory = "memory_cli:cli"
 prism-memory-mcp = "prism_memory_mcp:main"
 deltaharness = "memory_cli:cli"
@@ -40,3 +45,6 @@ py-modules = [
     "memory_cli",
     "prism_memory_mcp",
 ]
+
+[tool.setuptools.package-data]
+prism_memory = ["persona-canon.json", "js_env_refs.cjs"]

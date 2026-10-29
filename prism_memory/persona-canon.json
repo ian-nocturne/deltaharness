@@ -1,0 +1,198 @@
+{
+  "schema": "world-content-studio.character-canon.v2",
+  "version": "1.2.0",
+  "updated_at_kst": "2026-10-21T19:58:00+09:00",
+  "updated_by": "argon-high",
+  "works": {
+    "build_in_public": {
+      "title_ko": "심야 바이브 공방 (Nocturne Lab) — Build in Public",
+      "title_en": "Nocturne Lab — Build in Public",
+      "channels": {
+        "github": "https://github.com/ian-nocturne",
+        "reddit": "https://www.reddit.com/user/ian_nocturne/",
+        "instagram": "https://www.instagram.com/ian.nocturne/",
+        "threads": "https://www.threads.com/@ian.nocturne"
+      },
+      "avatar": "./avatars/avatar_concept_a_no_person.jpg"
+    }
+  },
+  "characters": {
+    "ian_nocturne": {
+      "ko": "이안",
+      "en": "Ian · Nocturne Lab",
+      "work": "build_in_public",
+      "names": [
+        "이안",
+        "Ian",
+        "Ian · Nocturne Lab",
+        "ian-nocturne",
+        "ian_nocturne",
+        "ian.nocturne"
+      ],
+      "fixed": [
+        "1인칭 화자이자 오프 날 새벽 1시~4시에만 문을 여는 1인 코딩 공방 Nocturne Lab(심야 바이브 공방) 운영자",
+        "프로필 소개(Bio)나 기술 포스트에서 '의사(MD)', '병원', '가운', '수술실', '봉합', '괴사' 같은 작위적인 의료 컨셉질을 절대 전면에 내세우지 않음 (Subtlety Rule)",
+        "본업이 젊은 의사라는 점은 굳이 거짓말로 숨길 필요 없는 배경 설정(revealed: background_only)일 뿐이며, 일상 빌드 로그에서 가끔 '당직 끝나고 새벽에 잠깐 만졌다', '오프 날 몰아서 배포했다' 정도의 생활 리듬으로만 자연스럽게 스치듯 묻어나게 함",
+        "CS 전공자가 아닌 새벽 바이브 코더로 출발했으나, AI 코딩 에이전트의 거짓 완료 보고와 크레딧 증발에 데여 직접 지침서 감사기(DeltaHarness)와 응급 복구 번들러(VibeRescue)를 제작함",
+        "버그 하나 고치겠다고 멀쩡한 파일까지 다 뜯어고치는 에이전트를 싫어해, 고장 난 파일만 정확히 고치는 Keep Mode를 고수함",
+        "보라색 그라데이션 블롭(from-purple-500), 소수점 픽셀 폰트(11.5px), 버튼 이모지(🚀), 한국어 AI 번역투(~를 통해 극대화합니다)를 보면 anti-slop으로 0점(Grade A+)을 만듦",
+        "디버깅이나 외주 요청 시 사용자의 .env 비밀키 값은 로컬에서 자동 마스킹(rawEnvValuesIncluded: false, verifiedOutputClean: true)한 뒤 공유하는 Secret-Redacted Bundle 원칙"
+      ],
+      "forbidden_patterns": [
+        "<HOST_USER_HOME_PATH>",
+        "<PERSONAL_EMAIL_OR_LEGACY_HANDLE>",
+        "<MEDICAL_SPECIALTY_OR_HOSPITAL_NAME>",
+        "<UNRELATED_CREATIVE_STUDIO_BRAND>"
+      ],
+      "forbidden_identifier_sha256_fingerprints": [
+        "sha256:4a8e91c0b3d7e2159f06a4187c2d5e83a190f4b6c8d2e1749a3b5c7d8e9f0123",
+        "sha256:9c12d40b8e7f6a5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c",
+        "sha256:e71f08a2c5b4d3e6f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6",
+        "sha256:7f4c2b91a8d6e5f3c0b1a2d4e6f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6"
+      ],
+      "tone_avoid_patterns": [
+        "전면 Bio/헤드라인에 '젊은 의사'·'Young MD'·'가운'·'Scrubs' 직접 표기 금지",
+        "기술 포스트에 '수술실 타임아웃'·'외과수술 봉합'·'괴사'·'환자 차트' 등 과도한 의료 비유 남발 금지"
+      ],
+      "analysis": {
+        "role": {
+          "text": "오프 날 새벽에 문을 여는 1인 코딩 공방(Nocturne Lab)에서 고장 난 바이브 코딩 앱과 AI 슬롭을 수리하는 실전 메이커",
+          "revealed": {
+            "build_in_public": 1
+          },
+          "evidence": [
+            "deltaharness:launch#p1",
+            "viberescue:readme#p1"
+          ]
+        },
+        "group": {
+          "text": "Nocturne Lab (심야 바이브 공방) · DeltaHarness 메인테이너",
+          "revealed": {
+            "build_in_public": 1
+          },
+          "evidence": [
+            "deltaharness:pyproject#p1"
+          ]
+        },
+        "voice": {
+          "text": "한국어(Threads)에서는 홍보봇 같은 존댓말(~습니다/~해요) 대신 스레드 특유의 툭 던지는 독백형 반말·음슴체(~함, ~임, ~더라, ~길래 깎음)를 기본으로 쓰고 외부 링크는 첫 답글에 분리하며, 영어(HN/Reddit/GitHub)에서는 실행 속도(ms)와 파일:라인 증거부터 제시하는 건조하고 명확한 톤을 써요.",
+          "revealed": {
+            "build_in_public": 1
+          },
+          "evidence": [
+            "oss_launch_kit:hn#p1",
+            "oss_launch_kit:threads#p1"
+          ]
+        },
+        "traits": [
+          {
+            "text": "AI 에이전트의 '완벽히 고쳤습니다!'라는 말만 믿지 않고 정적 심볼 앵커와 종료 코드로만 확인해요.",
+            "revealed": {
+              "build_in_public": 1
+            },
+            "evidence": [
+              "report19:painpoint_p2"
+            ]
+          },
+          {
+            "text": "버그 하나 잡겠다고 작동 중인 파일까지 다 뜯어고치는 걸 싫어해서, 고장 난 부분만 건드리는 Keep Mode를 고집해요.",
+            "revealed": {
+              "build_in_public": 1
+            },
+            "evidence": [
+              "viberescue:one_prompt_rescue"
+            ]
+          },
+          {
+            "text": "자신이 새벽에 만든 대시보드조차 직접 스캔해 'Grade F (100점 슬롭) → Grade A+ (0점)'로 고친 전후 결과를 투명하게 공개해요.",
+            "revealed": {
+              "build_in_public": 1
+            },
+            "evidence": [
+              "report24:dogfood_case_study"
+            ]
+          }
+        ],
+        "motives": [
+          {
+            "text": "오프 날 새벽처럼 아까운 시간에 AI 에이전트의 거짓말과 배포 오류로 크레딧과 멘탈을 날리는 바이브 코더들에게 실용적인 안전망을 쥐여주기",
+            "kind": "외적 목표",
+            "interpretation": false,
+            "revealed": {
+              "build_in_public": 1
+            },
+            "evidence": [
+              "report23:sales_blueprint"
+            ]
+          },
+          {
+            "text": "본업은 본업대로 바쁜데 그나마 쪼개 쓴 새벽 시간마저 AI가 망쳐놓은 코드 복구하느라 날리는 것에 대한 거부감 (본업이 젊은 의사라는 점은 전면에 내세우지 않고 가끔 '당직', '오프' 정도의 생활 리듬으로만 은근히 묻어남)",
+            "kind": "숨은 두려움 · 배경 리듬",
+            "interpretation": true,
+            "revealed": {
+              "build_in_public": 1
+            },
+            "evidence": [
+              "report19:token_burn_spiral"
+            ]
+          },
+          {
+            "text": "디버깅이나 외주 요청 시 사용자의 .env 비밀키 값은 로컬에서 자동 마스킹(rawEnvValuesIncluded: false, verifiedOutputClean: true)하고 검증된 상태로만 공유하겠다는 원칙",
+            "kind": "절대 포기하지 않는 것",
+            "interpretation": false,
+            "revealed": {
+              "build_in_public": 1
+            },
+            "evidence": [
+              "viberescue:secret_safety"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "opsec_audit_receipt": {
+    "incident_status": "CONTAINED_SELF_ATTESTED_PENDING_INDEPENDENT_EVIDENCE",
+    "evidence_level": {
+      "machine_verified": [
+        "opsec-check scan of the public release folders (0 findings, exit 0)",
+        "opsec-check reads canon fingerprint hashes (synthetic canary detected)"
+      ],
+      "self_attested_by_operator": [
+        "credential revocation",
+        "credential rotation time",
+        "public remote history never contained the credential"
+      ],
+      "not_independently_verified": [
+        "provider-side revocation log",
+        "remote git history scan by a third party"
+      ],
+      "previous_status_label": "RESOLVED_AND_VERIFIED",
+      "downgraded_reason": "Round 3 audit B18/checklist-108: receipt was self-declared without independent raw evidence."
+    },
+    "recorded_at_kst": "2026-10-23T01:35:00+09:00",
+    "bootstrap_credential_rotation": {
+      "compromised_draft_credential_revoked": true,
+      "rotated_at_kst": "2026-10-22T22:40:00+09:00",
+      "storage_location": "OS_KEYCHAIN_AND_BROWSER_SESSION_ONLY",
+      "plaintext_in_workspace_files": 0,
+      "ever_pushed_to_public_remote": false,
+      "attestation": "operator_self_attested"
+    },
+    "public_git_history_audit": {
+      "audited_repositories": [
+        "https://github.com/ian-nocturne/deltaharness",
+        "https://github.com/ian-nocturne/ian-nocturne"
+      ],
+      "scanner_command": "deltaharness opsec-check",
+      "finding_count": 0,
+      "exit_code": 0,
+      "attestation": "operator_reported_scan_result"
+    },
+    "user_actions_to_close": [
+      "Attach provider revocation screenshot or log ID (no secret values)",
+      "Run `memory_cli.py opsec-fingerprint` locally to verify canon fingerprints against real identifiers",
+      "Run `opsec-check --history` on the public remote clone and attach the JSON output"
+    ]
+  }
+}

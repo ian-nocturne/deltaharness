@@ -1,4 +1,4 @@
-"""Zero-Setup Repository Procedure & Instruction Drift Auditor (`deltaharness audit`).
+"""Zero-Setup Repository Procedure & Instruction Drift Auditor (`memlet check`, formerly `deltaharness audit`).
 
 Scans repository instruction files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`,
 `.cursor/rules/*.mdc`, `.github/copilot-instructions.md`, `README.md`, `docs/**/*.md`,
@@ -94,6 +94,9 @@ SLASH_PATH_RE = re.compile(
 )
 
 # Matches npm / pnpm / yarn / bun script invocations
+# `npm run ${{ matrix.script }}` and similar runtime-interpolated commands (GitHub Actions expressions)
+DYNAMIC_COMMAND_RE = re.compile(r"(?:npm|pnpm|yarn|bun)\s+run\s+\$\{\{[^}]*\}\}|\bmake\s+\$\{\{[^}]*\}\}")
+
 NPM_SCRIPT_RE = re.compile(
     r"(?:`|^|\s)(?:npm|pnpm|yarn|bun)\s+run\s+(?P<script>[A-Za-z0-9_:.-]+)"
 )
@@ -390,20 +393,54 @@ def _check_inline_call_vs_signature(
     return None
 
 
+def _git_show_text(repo_root: Path, ref: str, rel_path: str) -> Optional[str]:
+    try:
+        p_show = subprocess.run(
+            ["git", "show", f"{ref}:{rel_path}"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if p_show.returncode != 0:
+        return None
+    return p_show.stdout
+
+
+def _signatures_from_text(content: str, file_name: str) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    with tempfile.TemporaryDirectory(prefix="deltaharness-ref-") as td:
+        tmp_path = Path(td) / file_name
+        tmp_path.write_text(content, encoding="utf-8")
+        sigs = extract_file_symbol_signatures(tmp_path).get("symbols") or {}
+        hashes = extract_file_symbol_hashes(tmp_path)
+    return sigs, hashes
+
+
 def _compute_git_diff_changes(
     repo_root: Path,
     base_ref: str,
     head_ref: str = "HEAD",
 ) -> Dict[str, Any]:
-    """Inspect git diff between base_ref and head_ref and compute file & symbol contract deltas."""
+    """Inspect git diff between base_ref and head_ref and compute file & symbol contract deltas.
+
+    Both sides are read from git objects (`git show <ref>:<path>`), so the result is anchored to the
+    requested commits even when the working tree differs. Pass `head_ref="WORKTREE"` to compare the
+    base commit against the current working tree on disk instead.
+    """
+    use_worktree = str(head_ref or "").strip().upper() == "WORKTREE"
     diff_info: Dict[str, Any] = {
         "baseRef": base_ref,
         "headRef": head_ref,
+        "headSource": "worktree" if use_worktree else "git_object",
         "changedFiles": {},
+        "worktreeDiffersFromHead": [],
     }
+    diff_cmd = ["git", "diff", "--name-status", base_ref] if use_worktree else ["git", "diff", "--name-status", base_ref, head_ref]
     try:
         proc = subprocess.run(
-            ["git", "diff", "--name-status", base_ref, head_ref],
+            diff_cmd,
             cwd=str(repo_root),
             capture_output=True,
             text=True,
@@ -436,34 +473,35 @@ def _compute_git_diff_changes(
         # Load base file content via `git show <base_ref>:<old_rel_path>`
         base_content: Optional[str] = None
         if not status.startswith("A"):
-            try:
-                p_show = subprocess.run(
-                    ["git", "show", f"{base_ref}:{old_rel_path}"],
-                    cwd=str(repo_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=3.0,
-                )
-                if p_show.returncode == 0:
-                    base_content = p_show.stdout
-            except (OSError, subprocess.SubprocessError):
-                base_content = None
+            base_content = _git_show_text(repo_root, base_ref, old_rel_path)
 
-        # Load head file content (working tree if head_ref == "WORKTREE" or "HEAD" with local file, else git show)
         head_path = repo_root / rel_path
-        if status.startswith("D") or not head_path.is_file():
+        if status.startswith("D"):
+            diff_info["changedFiles"][rel_path] = file_delta
+            continue
+
+        # Load head file content from the requested commit (or the working tree for WORKTREE)
+        head_content: Optional[str]
+        if use_worktree:
+            try:
+                head_content = head_path.read_text(encoding="utf-8", errors="ignore") if head_path.is_file() else None
+            except OSError:
+                head_content = None
+        else:
+            head_content = _git_show_text(repo_root, head_ref, rel_path)
+            try:
+                disk_text = head_path.read_text(encoding="utf-8", errors="ignore") if head_path.is_file() else None
+            except OSError:
+                disk_text = None
+            if head_content is not None and disk_text != head_content:
+                diff_info["worktreeDiffersFromHead"].append(rel_path)
+        if head_content is None:
             diff_info["changedFiles"][rel_path] = file_delta
             continue
 
         if base_content is not None:
-            suffix = head_path.suffix or head_path.name
-            with tempfile.NamedTemporaryFile("w", suffix=f"_{head_path.name}", encoding="utf-8", delete=True) as tf:
-                tf.write(base_content)
-                tf.flush()
-                base_sigs = extract_file_symbol_signatures(Path(tf.name)).get("symbols") or {}
-                base_hashes = extract_file_symbol_hashes(Path(tf.name))
-            curr_sigs = extract_file_symbol_signatures(head_path).get("symbols") or {}
-            curr_hashes = extract_file_symbol_hashes(head_path)
+            base_sigs, base_hashes = _signatures_from_text(base_content, Path(old_rel_path).name)
+            curr_sigs, curr_hashes = _signatures_from_text(head_content, head_path.name)
 
             for sym, old_sig in base_sigs.items():
                 if sym not in curr_sigs:
@@ -552,6 +590,8 @@ def audit_repository(
     seen_finding_keys: Set[Tuple[Any, ...]] = set()
     blast_radius: List[Dict[str, Any]] = []
     total_references_checked = 0
+    commands_checked = 0
+    dynamic_unverified_commands: List[Dict[str, Any]] = []
 
     def _add_finding(
         *,
@@ -687,6 +727,20 @@ def audit_repository(
                         explicit_cd = active_cwd.resolve() != doc_path.parent.resolve()
                         break
 
+            # 0. Dynamic commands (`npm run ${{ matrix.script }}`) cannot be resolved statically: report them as unverified.
+            for m_dyn in DYNAMIC_COMMAND_RE.finditer(line):
+                dynamic_unverified_commands.append({"doc": doc_rel, "line": idx, "command": m_dyn.group(0).strip()[:120]})
+                _add_finding(
+                    rule_id="dynamic_command_unverified",
+                    severity="warning",
+                    doc_rel=doc_rel,
+                    line_no=idx,
+                    target_path=doc_rel,
+                    symbol=None,
+                    message=f"`{doc_rel}:{idx}`의 `{m_dyn.group(0).strip()[:60]}`는 실행 시점 값(`${{{{ }}}}`)이라 정적으로 확인하지 못했어요.",
+                    remediation="matrix 값 목록을 문서나 워크플로우에 명시하거나, 각 스크립트 이름을 직접 적어 검사 대상이 되게 하세요.",
+                )
+
             # 1. Check npm / pnpm / yarn / bun script references against active_cwd or root package.json
             if pkg_scripts is not None or workspace_pkg_scripts:
                 script_matches: List[str] = []
@@ -698,6 +752,7 @@ def audit_repository(
                         script_matches.append(scr_val)
                 for scr in script_matches:
                     total_references_checked += 1
+                    commands_checked += 1
                     cwd_pkg = active_cwd / "package.json"
                     cwd_scripts = (_get_sigs(cwd_pkg).get("symbols") or {}) if cwd_pkg.is_file() else {}
                     found_in_cwd = scr in cwd_scripts
@@ -730,6 +785,7 @@ def audit_repository(
                     if not tgt or tgt.lower() in MAKE_PROSE_STOPWORDS:
                         continue
                     total_references_checked += 1
+                    commands_checked += 1
                     if tgt not in make_targets:
                         _add_finding(
                             rule_id="missing_script",
@@ -1117,6 +1173,9 @@ def audit_repository(
         "scannedDocs": [str(p.relative_to(root)) for p in docs],
         "referencesChecked": total_references_checked,
         "totalReferencesChecked": total_references_checked,
+        "commandsChecked": commands_checked,
+        "unverifiedDynamicCommandCount": len(dynamic_unverified_commands),
+        "unverifiedDynamicCommands": dynamic_unverified_commands[:50],
         "findingsCount": len(findings),
         "findingCount": len(findings),
         "errorCount": error_count,
@@ -1141,7 +1200,7 @@ def format_audit_markdown(report: Dict[str, Any]) -> str:
     """Format an `audit_repository` report as a GitHub/PR Markdown summary."""
     status_badge = "PASS (0 broken contracts)" if report.get("ok") else f"FAIL ({report.get('errorCount', 0)} errors)"
     lines = [
-        f"## DeltaHarness Procedure & Instruction Audit — {status_badge}",
+        f"## Memlet · Ieum Check · Procedure & Instruction Audit — {status_badge}",
         "",
         f"- **Repository**: `{report.get('repoPath')}`",
         f"- **Scanned Docs**: {report.get('scannedDocsCount', 0)} files ({report.get('referencesChecked', 0)} references checked in {report.get('elapsedMs', 0)} ms)",
@@ -1235,9 +1294,9 @@ def format_audit_sarif(report: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "tool": {
                     "driver": {
-                        "name": "DeltaHarness",
+                        "name": "Ieum Memory",
                         "informationUri": "https://github.com/ian-nocturne/deltaharness",
-                        "version": "8.2.0",
+                        "version": "8.4.0",
                         "rules": rules,
                     }
                 },
@@ -1254,7 +1313,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     import argparse
     import sys
 
-    parser = argparse.ArgumentParser(description="DeltaHarness Procedure & Instruction Auditor")
+    parser = argparse.ArgumentParser(prog="memlet check", description="Memlet Check · Procedure & Instruction Auditor (formerly Ieum Check / DeltaHarness)")
     parser.add_argument("repo_positional", nargs="?", default=None, help="Target repository path")
     parser.add_argument("--repo-path", default=None, help="Target repository path")
     parser.add_argument("--base", default=None, help="Git base ref for blast-radius diff")

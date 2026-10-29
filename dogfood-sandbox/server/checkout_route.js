@@ -84,23 +84,35 @@ export async function POST(req, options = {}) {
   }
 }
 
-export function verifyCheckoutWebhook(rawBody, stripeSignatureHeader) {
+// Stripe's documented default tolerance for webhook timestamps (replay protection).
+export const WEBHOOK_TOLERANCE_SECONDS = 300;
+
+export function verifyCheckoutWebhook(rawBody, stripeSignatureHeader, options = {}) {
   const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!stripeWebhookSecret || !stripeSignatureHeader) {
     return false;
   }
-  const parts = Object.fromEntries(
-    String(stripeSignatureHeader)
-      .split(",")
-      .map((kv) => kv.trim().split("=", 2))
-      .filter((pair) => pair.length === 2)
+  const entries = String(stripeSignatureHeader)
+    .split(",")
+    .map((kv) => kv.trim())
+    .map((kv) => [kv.slice(0, kv.indexOf("=")), kv.slice(kv.indexOf("=") + 1)])
+    .filter(([k, v]) => k && v);
+  const timestampRaw = entries.find(([k]) => k === "t")?.[1];
+  const signatures = entries.filter(([k]) => k === "v1").map(([, v]) => v);
+  if (!timestampRaw || !/^\d+$/.test(timestampRaw) || signatures.length === 0) return false;
+
+  // Reject old or future-dated signatures so a captured request cannot be replayed later.
+  const nowSeconds = options.nowSeconds ?? Math.floor(Date.now() / 1000);
+  const toleranceSeconds = options.toleranceSeconds ?? WEBHOOK_TOLERANCE_SECONDS;
+  if (Math.abs(nowSeconds - Number(timestampRaw)) > toleranceSeconds) return false;
+
+  const expected = Buffer.from(
+    crypto.createHmac("sha256", stripeWebhookSecret).update(`${timestampRaw}.${rawBody}`, "utf8").digest("hex"),
+    "hex"
   );
-  if (!parts.t || !parts.v1) return false;
-  const expected = crypto
-    .createHmac("sha256", stripeWebhookSecret)
-    .update(`${parts.t}.${rawBody}`, "utf8")
-    .digest("hex");
-  const a = Buffer.from(expected, "hex");
-  const b = Buffer.from(parts.v1, "hex");
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return signatures.some((sig) => {
+    if (!/^[0-9a-f]+$/i.test(sig)) return false;
+    const candidate = Buffer.from(sig, "hex");
+    return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+  });
 }

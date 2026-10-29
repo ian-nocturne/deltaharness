@@ -1,6 +1,6 @@
-name: "DeltaHarness Audit & VibeRescue Gate"
-description: "Zero-setup repository instruction drift auditor (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `SKILL.md`), VibeRescue environment preflight, and Anti-Slop UI/Copy gate."
-author: "DeltaHarness Architecture Team"
+name: "Memlet Check (Instruction & Memory Drift Guard)"
+description: "Memlet Check: zero-setup instruction & memory drift guard (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `SKILL.md`) with VibeRescue preflight and Anti-Slop UI/copy gate. Formerly DeltaHarness / Ieum Check; inputs and outputs unchanged."
+author: "Ian · Nocturne Lab"
 branding:
   icon: "shield"
   color: "blue"
@@ -31,13 +31,13 @@ inputs:
     required: false
     default: "true"
   sarif-file:
-    description: "Optional path to write SARIF v2.1.0 output for GitHub Code Scanning."
+    description: "Optional path to write SARIF v2.1.0 output for GitHub Code Scanning. The default file name keeps its legacy value for backward compatibility; the SARIF tool.driver.name is set by the bundled checker and may show a legacy name (Ieum Memory / DeltaHarness) depending on the release."
     required: false
     default: "deltaharness-audit.sarif"
 
 outputs:
   status:
-    description: "Overall gate status ('PASS' or 'DRIFT_DETECTED')."
+    description: "Overall gate status: 'PASS', 'DRIFT_DETECTED' (real findings), or 'UNVERIFIED' (nothing checkable, e.g. no UI files or no instruction docs)."
     value: ${{ steps.run-gate.outputs.status }}
   finding-count:
     description: "Number of blocking/error findings across active gates."
@@ -57,7 +57,7 @@ runs:
       with:
         python-version: "3.11"
 
-    - name: Run DeltaHarness Gate
+    - name: Run Memlet Check Gate
       id: run-gate
       shell: bash
       env:
@@ -86,7 +86,7 @@ runs:
         VALID_MODES = ("audit", "rescue", "anti-slop", "all")
         mode = os.environ.get("INPUT_MODE", "audit").strip().lower()
         if mode not in VALID_MODES:
-            sys.stderr.write(f"Error: invalid DeltaHarness mode '{mode}'. Choose from {VALID_MODES}.\n")
+            sys.stderr.write(f"Error: invalid Memlet Check mode '{mode}'. Choose from {VALID_MODES}.\n")
             sys.exit(2)
 
         repo_path = os.environ.get("INPUT_REPO_PATH", ".").strip() or "."
@@ -100,6 +100,8 @@ runs:
         total_findings = 0
         slop_score = 0
         has_blocker = False
+        has_drift = False
+        unverified_reasons = []
 
         if mode in ("audit", "all"):
             audit_res = audit_repository(repo_path, base_ref=base_ref, head_ref=head_ref, output_format="json")
@@ -109,6 +111,16 @@ runs:
             total_findings += len(findings)
             if not audit_res.get("ok", True) or err_cnt > 0:
                 has_blocker = True
+                has_drift = True
+            elif int(audit_res.get("scannedDocsCount", 0)) == 0:
+                has_blocker = True
+                unverified_reasons.append("audit: NO_INSTRUCTION_DOCS_FOUND")
+            dynamic_unverified = int(audit_res.get("unverifiedDynamicCommandCount", 0) or 0)
+            if dynamic_unverified > 0:
+                # Commands built from runtime expressions (e.g. `npm run ${{ matrix.script }}`) were not checked.
+                # They are never reported as PASS.
+                has_blocker = True
+                unverified_reasons.append(f"audit: {dynamic_unverified} dynamic command(s) not verifiable statically")
             md_report = format_audit_markdown(audit_res)
             summary_lines.append(md_report)
             if sarif_file:
@@ -126,6 +138,10 @@ runs:
                 if crit_high == 0:
                     blocking_findings += len(blockers) or 1
                 has_blocker = True
+                if blockers:
+                    has_drift = True
+                else:
+                    unverified_reasons.append(f"rescue: {readiness or 'UNVERIFIED'}")
             summary_lines.append(rescue_res.get("rescueBriefMarkdown", ""))
 
         if mode in ("anti-slop", "all"):
@@ -138,6 +154,10 @@ runs:
             if not slop_res.get("ok", True) or slop_res.get("grade") == "UNVERIFIED" or slop_score >= 20 or slop_total > 0:
                 blocking_findings += slop_total or 1
                 has_blocker = True
+                if slop_res.get("grade") == "UNVERIFIED" and slop_total == 0:
+                    unverified_reasons.append("anti-slop: NO_UI_OR_COPY_FILES_FOUND")
+                else:
+                    has_drift = True
             summary_lines.append(slop_res.get("markdownReport", ""))
 
         full_summary = "\n\n---\n\n".join(s for s in summary_lines if s)
@@ -149,7 +169,10 @@ runs:
                 fp.write(full_summary + "\n")
 
         gh_out = os.environ.get("GITHUB_OUTPUT")
-        status = "DRIFT_DETECTED" if has_blocker else "PASS"
+        # Real findings win over UNVERIFIED; UNVERIFIED (nothing checkable) is never reported as PASS.
+        status = "DRIFT_DETECTED" if has_drift else ("UNVERIFIED" if has_blocker else "PASS")
+        if unverified_reasons:
+            print("UNVERIFIED: " + "; ".join(unverified_reasons))
         if gh_out:
             with open(gh_out, "a", encoding="utf-8") as fp:
                 fp.write(f"status={status}\n")

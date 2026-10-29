@@ -158,8 +158,136 @@ def _default_cli_root():
         return str(pkg_dir)
 
 
-def _run_opsec_check(target_path: str, canon_path=None) -> dict:
+_OPSEC_TOKEN_RE = None
+
+
+def _opsec_fingerprint(text: str) -> str:
+    import hashlib
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+OPSEC_MAX_SPAN_CHARS = 96
+OPSEC_ALLOWLIST_NAME = ".opsec-allowlist.json"
+
+
+def _opsec_is_word_char(ch: str) -> bool:
+    return ch.isalnum()
+
+
+def _opsec_candidates(line: str):
+    """Yield every span of `line` that starts and ends on a token boundary (<= OPSEC_MAX_SPAN_CHARS).
+
+    A boundary is the line start/end, any change between word and non-word characters, and both sides of
+    every punctuation character. So an exact registered string (including leading/trailing `_`, apostrophes,
+    `@`, and phrases of any word count up to the span limit) is always a candidate. Plaintext is only hashed.
+    """
+    n = len(line)
+    if not n:
+        return
+    bounds = {0, n}
+    for k in range(1, n):
+        prev, cur = line[k - 1], line[k]
+        pw, cw = _opsec_is_word_char(prev), _opsec_is_word_char(cur)
+        if pw != cw or not pw or not cw:
+            bounds.add(k)
+    ordered = sorted(bounds)
+    for idx, i in enumerate(ordered):
+        if line[i:i + 1].isspace():
+            continue
+        for j in ordered[idx + 1:]:
+            if j - i > OPSEC_MAX_SPAN_CHARS:
+                break
+            if line[j - 1].isspace():
+                continue
+            yield line[i:j]
+
+
+OPSEC_RULE_IDS = ("host_path_leak", "secret_literal_leak", "canon_forbidden_pattern")
+
+
+def _load_opsec_allowlist(target: Path):
+    """Explicit, per-finding exceptions: {file, ruleId, sha256 of the exact matched text, reason}. No blanket skips.
+
+    Every field is type-checked; a malformed file is a configuration error (exit 2), never a silent exception.
+    Fingerprint findings (`forbidden_identifier_fingerprint`) can never be allowlisted.
+    """
     import re
+    base = target if target.is_dir() else target.parent
+    path = base / OPSEC_ALLOWLIST_NAME
+    if not path.is_file():
+        return {}, None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    allowed_top = {"schema", "policy", "entries"}
+    allowed_entry = {"file", "ruleId", "matchSha256", "reason", "synthetic"}
+    if not isinstance(data, dict) or set(data) - allowed_top or not isinstance(data.get("entries"), list):
+        raise ValueError(f"Allowlist must be an object with only {sorted(allowed_top)} and a list `entries`")
+    for key in ("schema", "policy"):
+        if key in data and not (isinstance(data[key], str) and data[key].strip()):
+            raise ValueError(f"Allowlist `{key}` must be a non-empty string")
+    entries = {}
+    for item in data["entries"]:
+        if not isinstance(item, dict) or set(item) - allowed_entry:
+            raise ValueError(f"Allowlist entry has unsupported fields (allowed: {sorted(allowed_entry)}): {sorted(item) if isinstance(item, dict) else item!r}")
+        file_v, rule_v, hash_v, reason_v = item.get("file"), item.get("ruleId"), item.get("matchSha256"), item.get("reason")
+        if not (isinstance(file_v, str) and file_v.strip()):
+            raise ValueError(f"Allowlist entry `file` must be a non-empty string: {item!r}")
+        if rule_v not in OPSEC_RULE_IDS:
+            raise ValueError(f"Allowlist entry `ruleId` must be one of {OPSEC_RULE_IDS}: {rule_v!r}")
+        if not (isinstance(hash_v, str) and re.fullmatch(r"(?:sha256:)?[0-9a-f]{64}", hash_v)):
+            raise ValueError(f"Allowlist entry `matchSha256` must be a lowercase sha256 hex string: {hash_v!r}")
+        if not (isinstance(reason_v, str) and reason_v.strip()):
+            raise ValueError(f"Allowlist entry `reason` must be a non-empty string: {item!r}")
+        if "synthetic" in item and not isinstance(item["synthetic"], bool):
+            raise ValueError(f"Allowlist entry `synthetic` must be a boolean: {item['synthetic']!r}")
+        entries[(file_v, rule_v, "sha256:" + hash_v.replace("sha256:", ""))] = reason_v
+    return entries, str(path)
+
+
+def _load_opsec_canon(canon_path, target: Path):
+    """Return (patterns, fingerprints, canon_source). Patterns are compiled regexes; fingerprints are 'sha256:<hex>'."""
+    import re
+    candidates = []
+    if canon_path:
+        candidates.append(Path(canon_path))
+    else:
+        base = target if target.is_dir() else target.parent
+        candidates.extend([
+            base / "persona-canon.json",
+            Path(__file__).resolve().parent / "persona-canon.json",
+            Path(__file__).resolve().parent / "prism_memory" / "persona-canon.json",
+        ])
+        try:  # installed wheel: canon ships as prism_memory package data
+            import prism_memory as _pm
+            candidates.append(Path(_pm.__file__).resolve().parent / "persona-canon.json")
+        except Exception:
+            pass
+    for cp in candidates:
+        if not cp.is_file():
+            continue
+        canon = json.loads(cp.read_text(encoding="utf-8"))
+        patterns, fingerprints = [], set()
+        for ch in (canon.get("characters") or {}).values():
+            if not isinstance(ch, dict):
+                continue
+            for pat in ch.get("forbidden_patterns") or []:
+                if isinstance(pat, str) and pat and not (pat.startswith("<") and pat.endswith(">")):
+                    patterns.append(re.compile(pat, re.I))
+            for fp in ch.get("forbidden_identifier_sha256_fingerprints") or []:
+                raw = str(fp or "").strip().lower()
+                hexpart = raw.split(":", 1)[1] if raw.startswith("sha256:") else raw
+                if re.fullmatch(r"[0-9a-f]{64}", hexpart):
+                    fingerprints.add("sha256:" + hexpart)
+                else:
+                    raise ValueError(f"Malformed SHA-256 fingerprint in canon: {fp!r}")
+        return patterns, fingerprints, str(cp)
+    if canon_path:
+        raise FileNotFoundError(f"Canon file not found: {canon_path}")
+    return [], set(), None
+
+
+def _run_opsec_check(target_path: str, canon_path=None, include_history: bool = False, require_canon: bool = False) -> dict:
+    import re
+    import subprocess
     from prism_memory.viberescue import SECRET_VALUE_REDACT_RE
     p = Path(target_path or ".").resolve()
     if not p.exists():
@@ -167,50 +295,126 @@ def _run_opsec_check(target_path: str, canon_path=None) -> dict:
     files = [p] if p.is_file() else [
         f for f in sorted(p.rglob("*"))
         if f.is_file()
-        and not any(part in {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"} for part in f.parts)
-        and f.suffix.lower() in {".md", ".json", ".html", ".ts", ".tsx", ".js", ".jsx", ".py", ".sh", ".yml", ".yaml", ".toml", ".txt"}
+        and not any(part in {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build", ".deps"} for part in f.parts)
+        and f.suffix.lower() in {".md", ".json", ".html", ".ts", ".tsx", ".js", ".jsx", ".py", ".sh", ".yml", ".yaml", ".toml", ".txt", ".css", ".sql", ".cjs", ".mjs"}
     ]
     if not files:
         return {"ok": False, "exitCode": 2, "scannedFiles": 0, "findingCount": 0, "findings": [], "error": "No scannable files found"}
-    extra_patterns = []
-    if canon_path and Path(canon_path).is_file():
-        try:
-            canon = json.loads(Path(canon_path).read_text(encoding="utf-8"))
-            for ch in (canon.get("characters") or {}).values():
-                for pat in ch.get("forbidden_patterns") or []:
-                    if isinstance(pat, str) and pat and not (pat.startswith("<") and pat.endswith(">")):
-                        extra_patterns.append(("canon_forbidden_pattern", re.compile(pat, re.I)))
-        except Exception:
-            pass
+    try:
+        extra_patterns, fingerprints, canon_source = _load_opsec_canon(canon_path, p)
+        allowlist, allowlist_source = _load_opsec_allowlist(p)
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "exitCode": 2, "scannedFiles": 0, "findingCount": 0, "findings": [], "error": f"Canon/allowlist error: {exc}"}
     host_path_re = re.compile(r"(?:^|[\s\"'`=(]|file://)(?:/Users/(?!alice\b|bob\b|test\b)[A-Za-z0-9_.-]+|/home/(?!runner\b|ubuntu\b|user\b)[A-Za-z0-9_.-]+|[A-Za-z]:\\Users\\[A-Za-z0-9_.-]+)")
-    findings = []
+    findings, allowlisted = [], []
+
+    def _emit(rel: str, rule: str, matched: str, finding: dict) -> None:
+        key = (rel, rule, _opsec_fingerprint(matched))
+        if key in allowlist and Path(rel).name != OPSEC_ALLOWLIST_NAME:
+            allowlisted.append({"file": rel, "line": finding.get("line"), "ruleId": rule, "matchSha256": key[2], "reason": allowlist[key]})
+        else:
+            findings.append(finding)
+
+    def _scan_line(rel: str, line_no, line: str, source: str) -> None:
+        loc = {"file": rel, "line": line_no}
+        if source != "worktree":
+            loc["source"] = source
+        for m in host_path_re.finditer(line):
+            _emit(rel, "host_path_leak", m.group(0).strip(), {"ruleId": "host_path_leak", "severity": "error", **loc, "message": "Host filesystem user path detected"})
+        # No word- or file-name-based suppression: every secret-shaped literal is reported unless an explicit
+        # allowlist entry pins that exact match (by SHA-256) in that file with a written reason.
+        for m in SECRET_VALUE_REDACT_RE.finditer(line):
+            _emit(rel, "secret_literal_leak", m.group(0), {"ruleId": "secret_literal_leak", "severity": "error", **loc, "message": "Raw credential or secret token pattern detected"})
+        for c_pat in extra_patterns:
+            for m in c_pat.finditer(line):
+                _emit(rel, "canon_forbidden_pattern", m.group(0), {"ruleId": "canon_forbidden_pattern", "severity": "error", **loc, "message": "Forbidden OPSEC pattern detected"})
+        if fingerprints:
+            hit = set()
+            for cand in _opsec_candidates(line):
+                for variant in (cand, cand.lower(), cand.strip().lower()):
+                    fp = _opsec_fingerprint(variant)
+                    if fp in fingerprints and fp not in hit:
+                        hit.add(fp)
+                        # Report the fingerprint only; never echo the matched plaintext.
+                        findings.append({"ruleId": "forbidden_identifier_fingerprint", "severity": "error", **loc, "fingerprint": fp, "message": "Text matching a forbidden identifier fingerprint detected"})
+
     for f in files:
-        if f.name in ("test_memory_skills.py",):
-            continue
+        # The allowlist file itself is scanned like any other file (its reason/policy text included);
+        # its own findings cannot be allowlisted.
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         rel = str(f.relative_to(p)) if p.is_dir() else f.name
         for line_no, line in enumerate(text.splitlines(), 1):
-            if host_path_re.search(line):
-                findings.append({"ruleId": "host_path_leak", "severity": "error", "file": rel, "line": line_no, "message": "Host filesystem user path detected"})
-            if SECRET_VALUE_REDACT_RE.search(line) and "placeholder" not in line.lower() and "synthetic" not in line.lower():
-                findings.append({"ruleId": "secret_literal_leak", "severity": "error", "file": rel, "line": line_no, "message": "Raw credential or secret token pattern detected"})
-            for rule_id, c_pat in extra_patterns:
-                if c_pat.search(line):
-                    findings.append({"ruleId": rule_id, "severity": "error", "file": rel, "line": line_no, "message": "Forbidden OPSEC pattern detected"})
-    return {
-        "ok": len(findings) == 0,
-        "exitCode": 0 if len(findings) == 0 else 1,
+            _scan_line(rel, line_no, line, "worktree")
+
+    history = None
+    if include_history:
+        repo_dir = p if p.is_dir() else p.parent
+        try:
+            proc = subprocess.run(["git", "-C", str(repo_dir), "log", "-p", "--all", "--no-color", "--format=commit %H"], capture_output=True, text=True, errors="replace", timeout=120)
+        except (OSError, subprocess.SubprocessError) as exc:
+            proc = None
+            history = {"scanned": False, "error": str(exc)}
+        if proc is not None:
+            if proc.returncode != 0:
+                history = {"scanned": False, "error": (proc.stderr or "not a git repository").strip()[:200]}
+            else:
+                commit, cur_file, commits = "", "", set()
+                for raw in proc.stdout.splitlines():
+                    if raw.startswith("commit "):
+                        commit = raw[7:].strip(); commits.add(commit); continue
+                    if raw.startswith("+++ b/"):
+                        cur_file = raw[6:]; continue
+                    if raw.startswith("+") and not raw.startswith("+++"):
+                        _scan_line(cur_file or "?", None, raw[1:], f"git:{commit[:12]}")
+                history = {"scanned": True, "commitCount": len(commits)}
+
+    unverified = []
+    if include_history and not (history or {}).get("scanned"):
+        unverified.append("git_history_not_scanned")
+    if canon_source is None:
+        unverified.append("persona_canon_not_configured")
+    canon_blocking = require_canon and canon_source is None
+    history_blocking = "git_history_not_scanned" in unverified
+    if findings:
+        exit_code = 1
+    elif history_blocking or canon_blocking:
+        exit_code = 2  # a requested check did not run: never report success
+    else:
+        exit_code = 0
+    result = {
+        "ok": exit_code == 0,
+        "exitCode": exit_code,
+        "status": "FINDINGS" if findings else ("UNVERIFIED" if exit_code == 2 else "CLEAN_FOR_CHECKED_RULES"),
         "scannedFiles": len(files),
+        "canonSource": canon_source,
+        "canonStatus": "loaded" if canon_source else "not_configured",
+        "fingerprintCount": len(fingerprints),
         "findingCount": len(findings),
         "findings": findings,
+        "rawFindingCount": len(findings) + len(allowlisted),
+        "allowlistSource": allowlist_source,
+        "allowlistedCount": len(allowlisted),
+        "allowlisted": allowlisted,
+        "unverified": unverified,
     }
+    if history is not None:
+        result["gitHistory"] = history
+    return result
+
+
+PROGRAM_NAMES=('memlet','ieum-memory','deltaharness','prism-memory')
+
+
+def _program_name():
+    name=Path(sys.argv[0] if sys.argv else '').name
+    return name if name in PROGRAM_NAMES else 'memlet'
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__)
+    parser=argparse.ArgumentParser(prog=_program_name(),description='Memlet (formerly Ieum Memory / DeltaHarness / PRISM Memory): '+__doc__)
     parser.add_argument('--root',default=_default_cli_root())
     parser.add_argument('--task',default='')
     parser.add_argument('--session',default='')
@@ -220,13 +424,31 @@ def main():
     bak_p=sub.add_parser('backup');bak_p.add_argument('--dest-dir',default=None);bak_p.add_argument('--include-models',action='store_true')
     res_p=sub.add_parser('restore');res_p.add_argument('--backup-dir',required=True)
     rb_p=sub.add_parser('repo-benchmark');rb_p.add_argument('--work-dir',default=None)
-    aud_p=sub.add_parser('audit');aud_p.add_argument('repo_positional',nargs='?',default=None);aud_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    aud_p=sub.add_parser('audit',aliases=['check']);aud_p.add_argument('repo_positional',nargs='?',default=None);aud_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
     aud_p.add_argument('--base',default=None);aud_p.add_argument('--head',default='HEAD');aud_p.add_argument('--format',default='json',choices=['json','markdown','sarif']);aud_p.add_argument('--exit-zero',action='store_true')
     resc_p=sub.add_parser('rescue',aliases=['viberescue']);resc_p.add_argument('repo_positional',nargs='?',default=None);resc_p.add_argument('extra_positional',nargs='?',default=None);resc_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
     resc_p.add_argument('--write',action='store_true');resc_p.add_argument('--output-dir',default=None);resc_p.add_argument('--format',default='json',choices=['json','markdown','prompt']);resc_p.add_argument('--exit-zero',action='store_true')
     slop_p=sub.add_parser('anti-slop');slop_p.add_argument('repo_positional',nargs='?',default=None);slop_p.add_argument('extra_positional',nargs='?',default=None);slop_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
     slop_p.add_argument('--lock',action='store_true');slop_p.add_argument('--force',action='store_true');slop_p.add_argument('--archetype',default='linear-precision');slop_p.add_argument('--format',default='json',choices=['json','markdown','prompt']);slop_p.add_argument('--exit-zero',action='store_true')
-    opsec_p=sub.add_parser('opsec-check');opsec_p.add_argument('repo_positional',nargs='?',default=None);opsec_p.add_argument('--file','--repo-path','--repo',dest='target_file',default=None);opsec_p.add_argument('--canon',default=None)
+    init_p=sub.add_parser('init',help='Zero-daemon onboarding: create .memlet/config.json and .memlet/wiki/INDEX.md (never reads .env)')
+    init_p.add_argument('repo_positional',nargs='?',default=None);init_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    init_p.add_argument('--dry-run',action='store_true');init_p.add_argument('--force',action='store_true',help='Regenerate INDEX.md and re-pin anchors')
+    init_p.add_argument('--format',default='json',choices=['json','markdown'])
+    wiki_p=sub.add_parser('wiki',help='Check AST anchors in .memlet/wiki/*.md (active / compatible-unverified / stale)')
+    wiki_p.add_argument('repo_positional',nargs='?',default=None);wiki_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    wiki_p.add_argument('--dry-run',action='store_true');wiki_p.add_argument('--format',default='json',choices=['json','markdown'])
+    imp_rules_p=sub.add_parser('import',help='Import rules from CLAUDE.md / AGENTS.md / .cursorrules / .ai-memory / .claude-mem and tag each with its live AST status')
+    imp_rules_p.add_argument('repo_positional',nargs='?',default=None);imp_rules_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    imp_rules_p.add_argument('--from',dest='source',default='auto',choices=['auto','claude-md','cursorrules','ai-memory','claude-mem'])
+    imp_rules_p.add_argument('--dry-run',action='store_true');imp_rules_p.add_argument('--format',default='json',choices=['json','markdown'])
+    hand_p=sub.add_parser('handover',help='Signed <500-token handover capsule: verified constraints only, stale anchors quarantined')
+    hand_p.add_argument('repo_positional',nargs='?',default=None);hand_p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+    hand_p.add_argument('--next-step',default=None);hand_p.add_argument('--rejected',action='append',default=[],help='Rejected approach / dead-end (repeatable)')
+    hand_p.add_argument('--format',default='json',choices=['json','markdown']);hand_p.add_argument('--write',action='store_true',help='Write .memlet/wiki/HANDOVER.md and record a handover ledger event')
+    cmp_p=sub.add_parser('compare-bench',aliases=['benchmark-compare'],help='Reproducible refactoring & handover benchmark: Raw Markdown vs Unverified Wiki vs Memlet')
+    cmp_p.add_argument('repo_positional',nargs='?',default=None);cmp_p.add_argument('--format',default='json',choices=['json','markdown'])
+    opsec_p=sub.add_parser('opsec-check');opsec_p.add_argument('repo_positional',nargs='?',default=None);opsec_p.add_argument('--file','--repo-path','--repo',dest='target_file',default=None);opsec_p.add_argument('--canon',default=None);opsec_p.add_argument('--history',action='store_true',help='Also scan added lines in the full git history (git log -p --all); exit 2 if history cannot be scanned');opsec_p.add_argument('--require-canon',action='store_true',help='Exit 2 when no persona canon (fingerprint file) is found')
+    sub.add_parser('opsec-fingerprint',help='Read one identifier per stdin line and print its sha256 fingerprint (plaintext is not stored)')
     heal_p=sub.add_parser('heal-skills');heal_p.add_argument('--dry-run',action='store_true')
     ver_p=sub.add_parser('verify-skill');ver_p.add_argument('--id',required=True);ver_p.add_argument('--command',default=None)
     ver_p.add_argument('--proof-file',default=None);ver_p.add_argument('--operation-id',default='');ver_p.add_argument('--timeout',type=float,default=15.0)
@@ -234,7 +456,9 @@ def main():
     caps_p=sub.add_parser('capsule');caps_p.add_argument('--plan',default='');caps_p.add_argument('--files',default='');caps_p.add_argument('--worker',default='');caps_p.add_argument('--budget',type=int,default=1200)
     cons_p=sub.add_parser('consolidate');cons_p.add_argument('--threshold',type=float,default=0.35);cons_p.add_argument('--dry-run',action='store_true')
     sync_md_p=sub.add_parser('sync-md');sync_md_p.add_argument('--note-path',default=None);sync_md_p.add_argument('--explicit-user',action='store_true')
-    bench_p=sub.add_parser('benchmark');bench_p.add_argument('--budget',type=int,default=6000)
+    bench_p=sub.add_parser('benchmark',help='Without --task: refactoring & handover comparison benchmark; with --task: memory store benchmark')
+    bench_p.add_argument('repo_positional',nargs='?',default=None);bench_p.add_argument('--budget',type=int,default=6000)
+    bench_p.add_argument('--format',default=None,choices=['json','markdown'])
     insp_p=sub.add_parser('inspector');insp_p.add_argument('--budget',type=int,default=6000)
     exp_p=sub.add_parser('export');exp_p.add_argument('--targets',default='claude,agents,cursor,windsurf,mcp')
     exp_p.add_argument('--target-dir',default=None);exp_p.add_argument('--write',action='store_true');exp_p.add_argument('--lang',default='ko')
@@ -260,10 +484,39 @@ def main():
     if args.action=='repo-benchmark':return memory.repo_benchmark(work_dir=args.work_dir)
     if args.action=='opsec-check':
         target_p=args.target_file or args.repo_positional or '.'
-        return _run_opsec_check(target_p,canon_path=args.canon)
-    if args.action=='audit':
+        return _run_opsec_check(target_p,canon_path=args.canon,include_history=args.history,require_canon=args.require_canon)
+    if args.action in ('init','wiki'):
+        from prism_memory.memlet_wiki import init_project, wiki_status
+        target_repo=args.repo_path or args.repo_positional or '.'
+        if args.action=='init':
+            res=init_project(target_repo,dry_run=args.dry_run,force=args.force,output_format=args.format)
+        else:
+            res=wiki_status(target_repo,dry_run=args.dry_run,output_format=args.format)
+        if args.format=='markdown':res['_cli_text']=res['formatted']
+        return res
+    if args.action in ('import','handover'):
+        from prism_memory.memlet_wiki import build_handover, import_rules
+        target_repo=args.repo_path or args.repo_positional or '.'
+        if args.action=='import':
+            res=import_rules(target_repo,source=args.source,dry_run=args.dry_run,output_format=args.format)
+        else:
+            res=build_handover(target_repo,next_step=args.next_step,rejected=args.rejected,output_format=args.format,write=args.write)
+        if args.format=='markdown':res['_cli_text']=res['formatted']
+        return res
+    if args.action in ('compare-bench','benchmark-compare') or (args.action=='benchmark' and (
+            args.repo_positional or args.format or not (args.task or args.standalone))):
+        from prism_memory.memlet_wiki import run_refactoring_comparison_benchmark
+        res=run_refactoring_comparison_benchmark(output_format=args.format or 'json')
+        if args.format=='markdown':res['_cli_text']=res['formatted']
+        return res
+    if args.action=='opsec-fingerprint':
+        fps=[_opsec_fingerprint(ln.strip().lower()) for ln in sys.stdin.read().splitlines() if ln.strip()]
+        return {'ok':True,'exitCode':0,'normalization':'strip+lowercase','fingerprints':fps}
+    if args.action in ('audit','check'):
         target_repo=args.repo_path or args.repo_positional or '.'
         res=memory.audit_repo(target_repo,base_ref=args.base,head_ref=args.head,output_format=args.format)
+        if args.format=='markdown' and isinstance(res,dict) and isinstance(res.get('formatted'),str):
+            res['_cli_text']=res['formatted'] if res['formatted'].endswith('\n') else res['formatted']+'\n'
         if args.exit_zero and isinstance(res,dict):res['_cli_exit_zero']=True
         return res
     if args.action in ('rescue','viberescue'):
@@ -398,7 +651,11 @@ def cli():
     try:
         result = main()
         exit_zero = result.pop('_cli_exit_zero', False) if isinstance(result, dict) else False
-        print(json.dumps(result, ensure_ascii=False, allow_nan=False))
+        text = result.pop('_cli_text', None) if isinstance(result, dict) else None
+        if text is not None:
+            sys.stdout.write(text)
+        else:
+            print(json.dumps(result, ensure_ascii=False, allow_nan=False))
         if not exit_zero and isinstance(result, dict) and 'exitCode' in result:
             return int(result['exitCode'])
         return 0

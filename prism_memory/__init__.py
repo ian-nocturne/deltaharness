@@ -56,6 +56,10 @@ from .viberescue import (
     format_one_prompt_rescue,
     mask_sensitive_text,
 )
+from .memlet_wiki import (
+    init_project,
+    wiki_status,
+)
 from .anti_slop import (
     scan_anti_slop,
     format_anti_slop_markdown,
@@ -110,6 +114,8 @@ __all__ = [
     "format_anti_slop_markdown",
     "format_anti_slop_patch_prompt",
     "lock_design_system",
+    "init_project",
+    "wiki_status",
 ]
 
 
