@@ -147,6 +147,25 @@ memlet anti-slop . --format markdown
 anti-slop lock . --archetype linear-precision
 ```
 
+### 7. Inspect Memory & Routing in One Page (`memlet ui`)
+
+The **Nocturne Memory & Routing Inspector** renders one self-contained HTML file (no CDN, no network, no daemon) with the repository's AST anchor health, the refactoring & handover benchmark, the current handover capsule, and the Routlet performance / balanced / efficiency matrix. Every repository string is HTML-escaped and absolute host paths are left out.
+
+```bash
+memlet ui .                                   # writes .memlet/inspector.html after `memlet init` (alias: memlet inspector .)
+memlet ui . --output memlet-inspector.html    # or any other path
+```
+
+### 8. Start a New Project With a Stack Harness (`memlet pack`)
+
+The **Routlet × Memlet Pro Harness Pack** writes one bundle per stack (`nextjs-supabase`, `fastapi-postgres`, `swift-ios`) with 7 files: a `CLAUDE.md` constitution (anchor conventions, session delta rules, human gates), a cross-vendor `AGENTS.md`, a `SKILL.md` with pre-flight checks, receipt and rollback, a `PITFALLS.md` of 5 recorded dead-ends that `memlet handover` carries as rejected approaches, a Routlet routing preset, Linear / Stripe / Toss design tokens (every text pair >= 4.5:1), and a `MANIFEST.json` with SHA-256 checksums.
+
+```bash
+memlet pack --list                                   # stack metadata
+memlet pack --stack all --format markdown            # compute files and digests in memory, write nothing
+memlet pack --stack nextjs-supabase --output ./harness-packs
+```
+
 ### Command Reference
 
 | Command | Purpose |
@@ -159,6 +178,8 @@ anti-slop lock . --archetype linear-precision
 | `memlet benchmark [--format markdown]` (alias `compare-bench`) | Reproducible refactoring & handover comparison (see below). |
 | `memlet rescue .` (or `viberescue pack .`) | Secret-scrubbed static triage bundle for stuck projects. |
 | `memlet anti-slop .` (or `anti-slop scan .`) | UI & copy slop score with `file:line` findings. |
+| `memlet ui . [--output FILE]` (alias `inspector`) | Self-contained, escaped HTML inspector: AST health, benchmark, handover, Routlet matrix. |
+| `memlet pack [--stack all\|nextjs-supabase\|fastapi-postgres\|swift-ios] [--output DIR] [--dry-run] [--list]` | Stack harness bundles with a SHA-256 `MANIFEST.json`; no `--output` means nothing is written. |
 | `memlet --standalone capsule --plan "..." --files prism_memory/audit.py` | Budgeted cross-vendor handover capsule. |
 | `memlet --standalone doctor` | Environment & SQLite WAL health check. |
 

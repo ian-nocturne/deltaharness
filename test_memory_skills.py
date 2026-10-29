@@ -3733,6 +3733,140 @@ class MemletInitWikiTests(unittest.TestCase):
         self.assertEqual(0, code, out)
         self.assertEqual(res['resultDigest'], json.loads(out)['resultDigest'])
 
+    def test_memlet_pack_generates_verified_stack_bundles_and_checksums(self):
+        import hashlib
+        from prism_memory.memlet_pack import PACK_FILES, PACK_STACKS, build_harness_pack, list_packs
+        expected = set(PACK_FILES) | {'MANIFEST.json'}
+        self.assertEqual(7, len(expected))
+        listing = list_packs()
+        self.assertEqual(['nextjs-supabase', 'fastapi-postgres', 'swift-ios'], listing['stacks'])
+        for meta in listing['packs'].values():
+            self.assertEqual(5, len(meta['pitfalls']))
+        with self.assertRaises(ValueError):
+            build_harness_pack('rails')
+
+        # Dry run: everything in memory, nothing on disk, deterministic digest.
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td) / 'packs'
+            dry = build_harness_pack('all', output_dir=str(out_dir), dry_run=True)
+            self.assertFalse(dry['written'])
+            self.assertFalse(out_dir.exists())
+            self.assertEqual(21, dry['fileCount'])
+            self.assertEqual(sum(p['totalBytes'] for p in dry['packs']), dry['totalBytes'])
+            self.assertEqual(dry['manifestDigest'], build_harness_pack()['manifestDigest'])
+            self.assertIn('| `swift-ios` | 7 |', dry['formatted'])
+            code, out = self._cli('pack', '--dry-run', '--format', 'markdown')
+            self.assertEqual(0, code, out)
+            self.assertIn(dry['manifestDigest'], out)
+            self.assertFalse(Path('nextjs-supabase').exists())
+
+            # Real write via the CLI: 7 files per stack, MANIFEST checksums match the bytes on disk.
+            code, out = self._cli('pack', '--output', str(out_dir))
+            self.assertEqual(0, code, out)
+            data = json.loads(out)
+            self.assertTrue(data['written'])
+            self.assertEqual(dry['manifestDigest'], data['manifestDigest'])
+            for stack in PACK_STACKS:
+                pack_dir = out_dir / stack
+                self.assertEqual(expected, {p.name for p in pack_dir.iterdir()})
+                manifest = json.loads((pack_dir / 'MANIFEST.json').read_text(encoding='utf-8'))
+                self.assertEqual('8.4.0', manifest['version'])
+                self.assertEqual(stack, manifest['stack'])
+                self.assertEqual(list(PACK_FILES), [f['path'] for f in manifest['files']])
+                for entry in manifest['files']:
+                    raw = (pack_dir / entry['path']).read_bytes()
+                    self.assertEqual(entry['sha256'], hashlib.sha256(raw).hexdigest())
+                    self.assertEqual(entry['bytes'], len(raw))
+                    self.assertNotIn(td.encode(), raw)
+                self.assertTrue(manifest['quickstart'])
+                pack_entry = next(p for p in data['packs'] if p['stack'] == stack)
+                self.assertEqual(hashlib.sha256((pack_dir / 'MANIFEST.json').read_bytes()).hexdigest(), pack_entry['manifestSha256'])
+                preset = json.loads((pack_dir / 'routlet-preset.json').read_text(encoding='utf-8'))
+                self.assertEqual({'performance', 'balanced', 'efficiency'}, set(preset['options']))
+                models = {preset['options'][o][r]['model'] for o in preset['options'] for r in ('plan', 'implement', 'review')}
+                self.assertEqual({'Claude Opus 5.5', 'Fable 5.1', 'GPT-6 Astra', 'GPT-6.1 Sol'}, models)
+                tokens = json.loads((pack_dir / 'anti-slop-tokens.json').read_text(encoding='utf-8'))
+                self.assertEqual({'linear', 'stripe', 'toss'}, set(tokens['palettes']))
+                for brand in tokens['palettes'].values():
+                    self.assertEqual({'dark', 'light'}, set(brand))
+                    for mode in brand.values():
+                        self.assertTrue(all(r >= 4.5 for r in mode['contrast'].values()), mode['contrast'])
+                constitution = (pack_dir / 'CLAUDE.md').read_text(encoding='utf-8')
+                for heading in ('## AST Symbol Anchor Conventions', '## Session Delta Rules', '## Human Gates'):
+                    self.assertIn(heading, constitution)
+                self.assertIn('::', constitution)
+                for vendor in ('Claude Code', 'Codex', 'Gemini', 'Cursor'):
+                    self.assertIn(vendor, (pack_dir / 'AGENTS.md').read_text(encoding='utf-8'))
+                skill = (pack_dir / 'SKILL.md').read_text(encoding='utf-8')
+                for heading in ('## Pre-flight Checks', '## Execution Receipt', '## Rollback'):
+                    self.assertIn(heading, skill)
+            # Re-running is idempotent.
+            code, out = self._cli('pack', '--output', str(out_dir), '--stack', 'swift-ios')
+            self.assertEqual(0, code, out)
+            self.assertEqual({'unchanged'}, {f['op'] for f in json.loads(out)['packs'][0]['files']})
+
+            # PITFALLS.md dead-ends travel through `memlet handover` as rejected approaches.
+            (Path(td) / 'repo').mkdir()
+            repo = self._repo(Path(td) / 'repo')
+            self.assertEqual(0, self._cli('init', str(repo))[0])
+            (repo / '.memlet' / 'wiki' / 'pitfalls.md').write_bytes((out_dir / 'fastapi-postgres' / 'PITFALLS.md').read_bytes())
+            code, out = self._cli('handover', str(repo))
+            self.assertEqual(0, code, out)
+            rejected = json.loads(out)['rejectedApproaches']
+            self.assertEqual(5, sum(1 for r in rejected if r['approach'].startswith('[')))
+
+    def test_memlet_ui_inspector_renders_self_contained_escaped_html(self):
+        payloads = ('<script>alert("xss")</script>', '<img src=x onerror=alert(1)>', '<svg onload=alert(2)>')
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo(Path(td))
+            (repo / 'AGENTS.md').write_text(
+                '# Rules\n- Use `mod.py::real` ' + payloads[0] + ' and ' + payloads[1] + '.\n'
+                '- Keep `mod.py::body` stable ' + payloads[2] + '\n', encoding='utf-8')
+            self.assertEqual(0, self._cli('init', str(repo))[0])
+            code, out = self._cli('handover', str(repo), '--rejected', '<script>alert(3)</script>', '--write')
+            self.assertEqual(0, code, out)
+
+            out_file = Path(td) / 'out' / 'inspector.html'
+            code, out = self._cli('ui', str(repo), '--output', str(out_file))
+            self.assertEqual(0, code, out)
+            data = json.loads(out)
+            self.assertTrue(data['ok'])
+            self.assertTrue(data['written'])
+            self.assertEqual(0, data['externalNetworkCalls'])
+            html = out_file.read_text(encoding='utf-8')
+            self.assertEqual(len(html.encode('utf-8')), data['htmlBytes'])
+            for payload in payloads + ('<script>alert(3)</script>',):
+                self.assertNotIn(payload, html)
+            self.assertIn('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;', html)
+            self.assertNotRegex(html, r'(?i)<(?:img|svg|iframe)\b[^>]*\bon\w+=')
+            # Self-contained: no external scripts, styles or images.
+            self.assertNotRegex(html, r'(?i)<(?:script|img|iframe)\b[^>]*\bsrc\s*=\s*["\']?(?:https?:)?//')
+            self.assertNotRegex(html, r'(?i)<link\b[^>]*\bhref\s*=\s*["\']?(?:https?:)?//')
+            # No host path leaks.
+            self.assertNotIn('/Users/', html)
+            self.assertNotIn(td, html)
+            self.assertNotIn(str(Path(td).resolve()), html)
+            self.assertNotIn('memlet-canary-do-not-read', html)
+            # AST health, benchmark, handover and Routlet matrix sections.
+            for section_id in ('t-health', 't-bench', 't-handover', 't-routing'):
+                self.assertIn(f'id="{section_id}"', html)
+            for text in ('AST Anchor Health', 'Benchmark', 'Handover Capsule', 'Routlet'):
+                self.assertIn(text, html)
+            for model in ('Claude Opus 5.5', 'Fable 5.1', 'Astra', 'Sol'):
+                self.assertIn(model, html)
+
+            # Default target is .memlet/inspector.html; `inspector` (without --task) is the same command, and
+            # re-rendering an unchanged repository is byte-identical.
+            default_file = repo / '.memlet' / 'inspector.html'
+            code, out = self._cli('inspector', str(repo))
+            self.assertEqual(0, code, out)
+            self.assertTrue(json.loads(out)['written'])
+            first = default_file.read_text(encoding='utf-8')
+            self.assertIn('id="t-routing"', first)
+            code, out = self._cli('ui', str(repo))
+            self.assertEqual(0, code, out)
+            self.assertEqual(first, default_file.read_text(encoding='utf-8'))
+
     def test_memlet_program_name_and_entrypoints(self):
         import memory_cli
         with patch.object(sys, 'argv', ['/usr/local/bin/memlet']):
@@ -3749,7 +3883,7 @@ class MemletInitWikiTests(unittest.TestCase):
         code, out = self._cli('--help')
         self.assertIn('init', out)
         self.assertIn('wiki', out)
-        for command in ('import', 'handover', 'compare-bench'):
+        for command in ('import', 'handover', 'compare-bench', 'ui', 'pack'):
             self.assertIn(command, out)
 
 

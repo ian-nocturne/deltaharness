@@ -406,6 +406,9 @@ def _run_opsec_check(target_path: str, canon_path=None, include_history: bool = 
 
 
 PROGRAM_NAMES=('memlet','ieum-memory','deltaharness','prism-memory')
+# Repo-scoped actions handled before the task store opens (`inspector --task` keeps the store inspector).
+_EARLY_REPO_ACTIONS=('pack','ui','inspector')
+PACK_STACK_CHOICES=['all','nextjs-supabase','fastapi-postgres','swift-ios']
 
 
 def _program_name():
@@ -459,7 +462,16 @@ def main():
     bench_p=sub.add_parser('benchmark',help='Without --task: refactoring & handover comparison benchmark; with --task: memory store benchmark')
     bench_p.add_argument('repo_positional',nargs='?',default=None);bench_p.add_argument('--budget',type=int,default=6000)
     bench_p.add_argument('--format',default=None,choices=['json','markdown'])
-    insp_p=sub.add_parser('inspector');insp_p.add_argument('--budget',type=int,default=6000)
+    insp_p=sub.add_parser('inspector',help='Without --task: same HTML report as `ui`; with --task: task-memory inspector');insp_p.add_argument('--budget',type=int,default=6000)
+    ui_p=sub.add_parser('ui',help='Nocturne Memory & Routing Inspector: self-contained HTML report (AST health, benchmark, handover, Routlet matrix)')
+    for p in (insp_p,ui_p):
+        p.add_argument('repo_positional',nargs='?',default=None);p.add_argument('--repo-path','--repo',dest='repo_path',default=None)
+        p.add_argument('--output',default=None,help='HTML output file');p.add_argument('--output-dir',default=None)
+    pack_p=sub.add_parser('pack',help='Routlet x Memlet Pro Harness Pack: per-stack CLAUDE.md, AGENTS.md, SKILL.md, PITFALLS.md, Routlet preset, design tokens, MANIFEST.json')
+    pack_p.add_argument('repo_positional',nargs='?',default=None,help='Output directory (same as --output)')
+    pack_p.add_argument('--stack',default='all',choices=PACK_STACK_CHOICES);pack_p.add_argument('--output',default=None,help='Output directory; omit to compute in memory only')
+    pack_p.add_argument('--output-dir',default=None);pack_p.add_argument('--dry-run',action='store_true');pack_p.add_argument('--list',action='store_true',help='List available stack packs')
+    pack_p.add_argument('--format',default='json',choices=['json','markdown'])
     exp_p=sub.add_parser('export');exp_p.add_argument('--targets',default='claude,agents,cursor,windsurf,mcp')
     exp_p.add_argument('--target-dir',default=None);exp_p.add_argument('--write',action='store_true');exp_p.add_argument('--lang',default='ko')
     cap_p=sub.add_parser('capture');cap_p.add_argument('--file',default=None);cap_p.add_argument('--text',default=None)
@@ -485,6 +497,19 @@ def main():
     if args.action=='opsec-check':
         target_p=args.target_file or args.repo_positional or '.'
         return _run_opsec_check(target_p,canon_path=args.canon,include_history=args.history,require_canon=args.require_canon)
+    if args.action in _EARLY_REPO_ACTIONS and not (args.action=='inspector' and (args.task or args.standalone)):
+        if args.action=='pack':
+            from prism_memory.memlet_pack import build_harness_pack, list_packs
+            if args.list:return list_packs()
+            out_dir=args.output or args.output_dir or (args.repo_positional if args.repo_positional not in (None,'.') else None)
+            res=build_harness_pack(args.stack,output_dir=out_dir,dry_run=args.dry_run,output_format=args.format)
+            if args.format=='markdown' and isinstance(res.get('formatted'),str):
+                res['_cli_text']=res['formatted']+('\n' if not res['formatted'].endswith('\n') else '')
+            return res
+        from prism_memory.memlet_inspector import export_inspector_html
+        target_repo=args.repo_path or args.repo_positional or '.'
+        out_file=args.output or args.output_dir
+        return export_inspector_html(target_repo,output_path=out_file)
     if args.action in ('init','wiki'):
         from prism_memory.memlet_wiki import init_project, wiki_status
         target_repo=args.repo_path or args.repo_positional or '.'
